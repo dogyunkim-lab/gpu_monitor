@@ -2,13 +2,6 @@
 # GPU Monitor 설치 스크립트 (RHEL 8 / 폐쇄망)
 # 사용법: bash install.sh [--pypi-mirror URL]
 
-# Windows(CRLF) 줄바꿈으로 실행된 경우 자동 재실행
-if head -1 "$0" | grep -q $'\r'; then
-    tmp=$(mktemp)
-    sed 's/\r$//' "$0" > "$tmp"
-    exec bash "$tmp" "$@"
-fi
-
 set -e
 set -o pipefail
 
