@@ -3,7 +3,7 @@
  * Canvas API 직접 구현 (폐쇄망, CDN 불가)
  */
 
-const REFRESH_MS = 5000;
+const REFRESH_MS = 1000;
 const COLORS = [
     '#3b82f6', '#22c55e', '#eab308', '#ef4444', '#a855f7',
     '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#6366f1'

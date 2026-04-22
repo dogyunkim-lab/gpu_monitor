@@ -41,4 +41,4 @@ alerts:
 web:
   host: "0.0.0.0"
   port: 5555
-  refresh_seconds: 5
+  refresh_seconds: 1
