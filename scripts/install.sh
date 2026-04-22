@@ -1,6 +1,6 @@
 #!/bin/bash
 # GPU Monitor 설치 스크립트 (RHEL 8 / 폐쇄망)
-# 전제: git clone으로 프로젝트를 이미 받은 상태
+# Prometheus + Grafana 설정 생성 → 배포 → 서비스 재시작
 # 사용법: cd gpu-monitor && bash scripts/install.sh
 
 set -e
@@ -10,67 +10,91 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SRC_DIR="${PROJECT_DIR}/src"
 VENV_DIR="${PROJECT_DIR}/venv"
-SERVICE_NAME="gpu-monitor"
 CONFIG_PATH="${PROJECT_DIR}/config.yaml"
+OUTPUT_DIR="${PROJECT_DIR}/output"
+
+PROMETHEUS_CONF_DIR="/etc/prometheus"
+GRAFANA_CONF_DIR="/etc/grafana"
 
 echo "========================================="
-echo "  GPU Monitor 설치"
+echo "  GPU Monitor — Prometheus + Grafana 설정 배포"
 echo "========================================="
 echo "  프로젝트 경로: ${PROJECT_DIR}"
 
 # 1. Python venv 생성
-echo "[1/4] Python venv 생성: ${VENV_DIR}"
+echo "[1/5] Python venv 생성: ${VENV_DIR}"
 python3 -m venv "${VENV_DIR}"
 source "${VENV_DIR}/bin/activate"
 
 # 2. 의존성 설치
-echo "[2/4] 의존성 설치"
+echo "[2/5] 의존성 설치"
 pip install --upgrade pip
 cd "${SRC_DIR}"
 pip install -e .
 
-deactivate
-
-# 3. 설정 파일 생성
-echo "[3/4] 설정 파일 생성"
+# 3. 설정 파일 확인
+echo "[3/5] 설정 파일 확인"
 if [ ! -f "${CONFIG_PATH}" ]; then
     cp "${PROJECT_DIR}/examples/config.yaml.example" "${CONFIG_PATH}"
     echo "  config.yaml 생성됨 — VM 목록을 편집하세요: ${CONFIG_PATH}"
-else
-    echo "  config.yaml 이미 존재 — 건너뜀"
+    echo "  편집 후 다시 실행하세요."
+    deactivate
+    exit 0
 fi
 
-# 4. systemd 서비스 등록
-echo "[4/4] systemd 서비스 등록"
-sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
-[Unit]
-Description=GPU Monitor — DCGM exporter 기반 다중 GPU VM 통합 모니터링
-After=network.target
+# 4. 설정 파일 생성
+echo "[4/5] Prometheus + Grafana 설정 생성"
+gpu-monitor -c "${CONFIG_PATH}" generate all -o "${OUTPUT_DIR}"
 
-[Service]
-Type=simple
-WorkingDirectory=${PROJECT_DIR}
-ExecStart=${VENV_DIR}/bin/gpu-monitor -c ${CONFIG_PATH} start
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-Environment=PYTHONUNBUFFERED=1
+# 5. 설정 배포 + 서비스 재시작
+echo "[5/5] 설정 배포"
 
-[Install]
-WantedBy=multi-user.target
-EOF
+# Prometheus
+if [ -d "${OUTPUT_DIR}/prometheus" ]; then
+    echo "  Prometheus 설정 → ${PROMETHEUS_CONF_DIR}"
+    sudo cp "${OUTPUT_DIR}/prometheus/prometheus.yml" "${PROMETHEUS_CONF_DIR}/prometheus.yml"
+    sudo mkdir -p "${PROMETHEUS_CONF_DIR}/rules"
+    sudo cp "${OUTPUT_DIR}/prometheus/rules/gpu_alerts.yml" "${PROMETHEUS_CONF_DIR}/rules/gpu_alerts.yml"
 
-sudo systemctl daemon-reload
-sudo systemctl enable "${SERVICE_NAME}"
+    if systemctl is-active --quiet prometheus; then
+        echo "  Prometheus 재시작"
+        sudo systemctl reload prometheus || sudo systemctl restart prometheus
+    else
+        echo "  [WARN] Prometheus 서비스가 실행중이지 않습니다."
+    fi
+fi
+
+# Grafana
+if [ -d "${OUTPUT_DIR}/grafana" ]; then
+    echo "  Grafana 설정 → ${GRAFANA_CONF_DIR}"
+    sudo mkdir -p "${GRAFANA_CONF_DIR}/provisioning/datasources"
+    sudo mkdir -p "${GRAFANA_CONF_DIR}/provisioning/dashboards"
+    sudo mkdir -p "${GRAFANA_CONF_DIR}/dashboards"
+
+    sudo cp "${OUTPUT_DIR}/grafana/provisioning/datasources/prometheus.yml" \
+        "${GRAFANA_CONF_DIR}/provisioning/datasources/prometheus.yml"
+    sudo cp "${OUTPUT_DIR}/grafana/provisioning/dashboards/default.yml" \
+        "${GRAFANA_CONF_DIR}/provisioning/dashboards/default.yml"
+    sudo cp "${OUTPUT_DIR}/grafana/dashboards/gpu-cluster.json" \
+        "${GRAFANA_CONF_DIR}/dashboards/gpu-cluster.json"
+
+    if systemctl is-active --quiet grafana-server; then
+        echo "  Grafana 재시작"
+        sudo systemctl restart grafana-server
+    else
+        echo "  [WARN] Grafana 서비스가 실행중이지 않습니다."
+    fi
+fi
+
+deactivate
 
 echo ""
 echo "========================================="
-echo "  설치 완료!"
+echo "  배포 완료!"
 echo "========================================="
 echo ""
 echo "다음 단계:"
-echo "  1. VM 목록 편집: vi ${CONFIG_PATH}"
-echo "  2. 서비스 시작:  sudo systemctl start ${SERVICE_NAME}"
-echo "  3. 로그 확인:    sudo journalctl -u ${SERVICE_NAME} -f"
-echo "  4. 대시보드:     http://<이 서버 IP>:5555"
+echo "  1. VM 목록 확인: ${VENV_DIR}/bin/gpu-monitor -c ${CONFIG_PATH} status"
+echo "  2. 연결 검증:    ${VENV_DIR}/bin/gpu-monitor -c ${CONFIG_PATH} validate"
+echo "  3. Prometheus:   http://<이 서버 IP>:9090/targets"
+echo "  4. Grafana:      http://<이 서버 IP>:3000"

@@ -1,10 +1,6 @@
-httpx>=0.24
-pandas>=1.5
-matplotlib>=3.5
 pyyaml>=6.0
 click>=8.0
-flask>=2.3
-prometheus-client>=0.17
+httpx>=0.24
 
 [dev]
 pytest>=7.0

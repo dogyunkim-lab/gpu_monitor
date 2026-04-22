@@ -1,12 +1,13 @@
-"""Click 기반 CLI 엔트리포인트."""
+"""Click 기반 CLI 엔트리포인트 — 설정 생성기 + 검증 유틸리티."""
 
 from __future__ import annotations
 
 import logging
 import sys
-import time
+from pathlib import Path
 
 import click
+import httpx
 
 from gpu_monitor import __version__
 from gpu_monitor.config import load_config
@@ -27,220 +28,161 @@ def setup_logging(verbose: bool = False):
 @click.option("-v", "--verbose", is_flag=True, help="상세 로그 출력")
 @click.pass_context
 def main(ctx, config_path, verbose):
-    """GPU Monitor — DCGM exporter 기반 다중 GPU VM 통합 모니터링"""
+    """GPU Monitor — Prometheus + Grafana 설정 생성기"""
     setup_logging(verbose)
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config(config_path)
     ctx.obj["verbose"] = verbose
 
 
+# ---------- generate ----------
+
+@main.group()
+def generate():
+    """설정 파일 생성."""
+    pass
+
+
+@generate.command("prometheus")
+@click.option("-o", "--output", default=None, help="출력 디렉토리")
+@click.pass_context
+def gen_prometheus(ctx, output):
+    """prometheus.yml 생성."""
+    from gpu_monitor.generators.prometheus import generate_prometheus_config
+
+    config = ctx.obj["config"]
+    out = Path(output) if output else None
+    path = generate_prometheus_config(config, output_dir=out)
+    click.echo(f"생성됨: {path}")
+
+
+@generate.command("alerts")
+@click.option("-o", "--output", default=None, help="출력 디렉토리")
+@click.pass_context
+def gen_alerts(ctx, output):
+    """Prometheus alert rules 생성."""
+    from gpu_monitor.generators.alerts import generate_alert_rules
+
+    config = ctx.obj["config"]
+    out = Path(output) if output else None
+    path = generate_alert_rules(config, output_dir=out)
+    click.echo(f"생성됨: {path}")
+
+
+@generate.command("grafana")
+@click.option("-o", "--output", default=None, help="출력 디렉토리")
+@click.pass_context
+def gen_grafana(ctx, output):
+    """Grafana provisioning + dashboard JSON 생성."""
+    from gpu_monitor.generators.grafana import generate_grafana_provisioning
+
+    config = ctx.obj["config"]
+    out = Path(output) if output else None
+    paths = generate_grafana_provisioning(config, output_dir=out)
+    for label, path in paths.items():
+        click.echo(f"생성됨: {path}")
+
+
+@generate.command("all")
+@click.option("-o", "--output", default=None, help="출력 루트 디렉토리")
+@click.pass_context
+def gen_all(ctx, output):
+    """prometheus.yml + alert rules + Grafana 설정 모두 생성."""
+    from gpu_monitor.generators.prometheus import generate_prometheus_config
+    from gpu_monitor.generators.alerts import generate_alert_rules
+    from gpu_monitor.generators.grafana import generate_grafana_provisioning
+
+    config = ctx.obj["config"]
+    out = Path(output) if output else None
+
+    prom_out = out / "prometheus" if out else None
+    grafana_out = out / "grafana" if out else None
+
+    p = generate_prometheus_config(config, output_dir=prom_out)
+    click.echo(f"생성됨: {p}")
+
+    a = generate_alert_rules(config, output_dir=prom_out)
+    click.echo(f"생성됨: {a}")
+
+    paths = generate_grafana_provisioning(config, output_dir=grafana_out)
+    for label, path in paths.items():
+        click.echo(f"생성됨: {path}")
+
+    click.echo("\n모든 설정 파일 생성 완료.")
+
+
+# ---------- validate ----------
+
 @main.command()
 @click.pass_context
-def start(ctx):
-    """수집 + 웹 대시보드 시작."""
+def validate(ctx):
+    """config.yaml 검증 + DCGM exporter 연결 확인."""
     config = ctx.obj["config"]
-    logger = logging.getLogger(__name__)
+    errors = []
 
     if not config.vms:
-        logger.warning("설정된 VM이 없습니다. config.yaml을 확인하세요.")
+        errors.append("VM이 설정되지 않았습니다.")
 
-    from gpu_monitor.storage import MetricStorage
-    from gpu_monitor.collector import MetricCollector
-    from gpu_monitor.alerts import AlertManager
-    from gpu_monitor.recorder import Recorder
-    from gpu_monitor.web.server import init_app
+    for vm in config.vms:
+        if not vm.host:
+            errors.append(f"VM '{vm.name}': host가 비어있습니다.")
 
-    storage = MetricStorage(
-        db_path=config.storage.db_path,
-        retention_days=config.storage.retention_days,
-    )
-    alert_manager = AlertManager(config.alerts)
-    collector = MetricCollector(
-        config=config,
-        storage=storage,
-        on_metrics=alert_manager.process_metrics,
-    )
-    recorder = Recorder(config=config, collector=collector)
+    if errors:
+        for e in errors:
+            click.echo(f"  [ERROR] {e}", err=True)
+        sys.exit(1)
 
-    # 수집 시작
-    collector.start()
+    click.echo(f"설정 검증 통과: VM {len(config.vms)}대")
 
-    # 웹 서버 시작
-    app = init_app(storage, collector, alert_manager, recorder)
-    logger.info("웹 대시보드: http://%s:%d", config.web.host, config.web.port)
+    # 연결 확인
+    click.echo("\nDCGM exporter 연결 확인:")
+    fail_count = 0
+    for vm in config.vms:
+        try:
+            resp = httpx.get(vm.url, timeout=3.0)
+            if resp.status_code == 200 and "DCGM_FI_DEV_GPU_UTIL" in resp.text:
+                click.echo(f"  [OK]   {vm.name} ({vm.url})")
+            else:
+                click.echo(f"  [WARN] {vm.name} — HTTP {resp.status_code}, DCGM 메트릭 없음")
+                fail_count += 1
+        except httpx.RequestError as exc:
+            click.echo(f"  [FAIL] {vm.name} — {exc}")
+            fail_count += 1
 
-    try:
-        app.run(
-            host=config.web.host,
-            port=config.web.port,
-            debug=False,
-            use_reloader=False,
-        )
-    except KeyboardInterrupt:
-        pass
-    finally:
-        collector.stop()
-        storage.close()
-        logger.info("GPU Monitor 종료")
+    if fail_count:
+        click.echo(f"\n{fail_count}대 연결 실패")
+        sys.exit(1)
+    else:
+        click.echo(f"\n전체 {len(config.vms)}대 정상")
 
+
+# ---------- status ----------
 
 @main.command()
 @click.pass_context
 def status(ctx):
-    """현재 GPU 상태 확인 (CLI 출력)."""
+    """각 VM DCGM exporter 상태 확인."""
     config = ctx.obj["config"]
 
-    from gpu_monitor.storage import MetricStorage
-    from gpu_monitor.collector import MetricCollector
+    if not config.vms:
+        click.echo("설정된 VM이 없습니다.")
+        return
 
-    storage = MetricStorage(db_path=config.storage.db_path)
-    collector = MetricCollector(config=config, storage=storage)
+    click.echo(f"{'VM':<20} {'Host:Port':<25} {'Status':<10} {'GPUs':<6}")
+    click.echo("-" * 65)
 
-    click.echo(f"수집 대상 VM: {len(config.vms)}대")
     for vm in config.vms:
-        click.echo(f"  - {vm.name} ({vm.url})")
-
-    click.echo("\n현재 메트릭 수집 중...")
-    metrics = collector.collect_all()
-
-    if not metrics:
-        click.echo("수집된 메트릭이 없습니다.")
-        storage.close()
-        return
-
-    # (host, gpu_id) 그룹핑
-    gpus = {}
-    for m in metrics:
-        key = (m.host, m.gpu_id)
-        gpus.setdefault(key, {})[m.metric_name] = m.value
-
-    click.echo(f"\n{'Host':<20} {'GPU':<6} {'Util%':<8} {'MemBW%':<8} {'Temp°C':<8} {'Power W':<8} {'VRAM MiB':<12}")
-    click.echo("-" * 80)
-
-    for (host, gpu_id), vals in sorted(gpus.items()):
-        util = vals.get("DCGM_FI_DEV_GPU_UTIL", 0)
-        mem_bw = vals.get("DCGM_FI_DEV_MEM_COPY_UTIL", 0)
-        temp = vals.get("DCGM_FI_DEV_GPU_TEMP", 0)
-        power = vals.get("DCGM_FI_DEV_POWER_USAGE", 0)
-        vram_used = vals.get("DCGM_FI_DEV_FB_USED", 0)
-        vram_free = vals.get("DCGM_FI_DEV_FB_FREE", 0)
-
-        click.echo(
-            f"{host:<20} {gpu_id:<6} {util:<8.1f} {mem_bw:<8.1f} {temp:<8.0f} {power:<8.1f} "
-            f"{vram_used:.0f}/{vram_used + vram_free:.0f}"
-        )
-
-    storage.close()
-
-
-@main.group()
-def record():
-    """기록 모드 (고해상도 데이터 수집)."""
-    pass
-
-
-@record.command("start")
-@click.option("-l", "--label", default="recording", help="기록 라벨")
-@click.pass_context
-def record_start(ctx, label):
-    """기록 시작."""
-    config = ctx.obj["config"]
-
-    from gpu_monitor.storage import MetricStorage
-    from gpu_monitor.collector import MetricCollector
-    from gpu_monitor.alerts import AlertManager
-    from gpu_monitor.recorder import Recorder
-
-    storage = MetricStorage(db_path=config.storage.db_path)
-    alert_manager = AlertManager(config.alerts)
-    collector = MetricCollector(config=config, storage=storage, on_metrics=alert_manager.process_metrics)
-    recorder = Recorder(config=config, collector=collector)
-
-    session = recorder.start(label=label)
-    click.echo(f"기록 시작: {session.session_id}")
-    click.echo(f"  라벨: {session.label}")
-    click.echo(f"  간격: {session.interval_ms}ms")
-    click.echo(f"  DB: {session.db_path}")
-    click.echo("\nCtrl+C로 중지...")
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        session = recorder.stop()
-        if session and session.end_time:
-            duration = session.end_time - session.start_time
-            click.echo(f"\n기록 종료 ({duration:.1f}초)")
-            click.echo(f"  DB: {session.db_path}")
-    finally:
-        collector.stop()
-        storage.close()
-
-
-@record.command("list")
-@click.pass_context
-def record_list(ctx):
-    """저장된 기록 세션 목록."""
-    config = ctx.obj["config"]
-
-    from gpu_monitor.storage import MetricStorage
-    from gpu_monitor.collector import MetricCollector
-    from gpu_monitor.recorder import Recorder
-
-    storage = MetricStorage(db_path=config.storage.db_path)
-    collector = MetricCollector(config=config, storage=storage)
-    recorder = Recorder(config=config, collector=collector)
-
-    sessions = recorder.list_sessions()
-    if not sessions:
-        click.echo("저장된 기록이 없습니다.")
-        return
-
-    for s in sessions:
-        duration = ""
-        if s["end_time"]:
-            dur = s["end_time"] - s["start_time"]
-            duration = f" ({dur:.1f}초)"
-        click.echo(f"  {s['session_id']}  [{s['label']}]{duration}")
-        click.echo(f"    DB: {s['db_path']}")
-
-    storage.close()
-
-
-@main.command()
-@click.argument("db_path")
-@click.option("-o", "--output", default="reports", help="출력 디렉토리")
-@click.pass_context
-def report(ctx, db_path, output):
-    """기록 세션 리포트 생성."""
-    from gpu_monitor.reporter import Reporter
-
-    reporter = Reporter(output_dir=output)
-    click.echo(f"리포트 생성 중: {db_path}")
-
-    result = reporter.generate_report(db_path)
-
-    click.echo("\n" + result["summary"])
-    click.echo(f"\nCSV: {result['csv_path']}")
-    for p in result.get("chart_paths", []):
-        click.echo(f"Chart: {p}")
-
-
-@main.command()
-@click.pass_context
-def cleanup(ctx):
-    """오래된 메트릭 데이터 정리."""
-    config = ctx.obj["config"]
-
-    from gpu_monitor.storage import MetricStorage
-
-    storage = MetricStorage(
-        db_path=config.storage.db_path,
-        retention_days=config.storage.retention_days,
-    )
-    deleted = storage.cleanup()
-    click.echo(f"{deleted}개 오래된 레코드 삭제 (retention: {config.storage.retention_days}일)")
-    storage.close()
+        try:
+            resp = httpx.get(vm.url, timeout=3.0)
+            if resp.status_code == 200:
+                gpu_lines = [l for l in resp.text.splitlines()
+                             if l.startswith("DCGM_FI_DEV_GPU_UTIL{")]
+                gpu_count = len(gpu_lines)
+                click.echo(f"{vm.name:<20} {vm.host}:{vm.port:<18} {'UP':<10} {gpu_count:<6}")
+            else:
+                click.echo(f"{vm.name:<20} {vm.host}:{vm.port:<18} {'HTTP ' + str(resp.status_code):<10} {'-':<6}")
+        except httpx.RequestError:
+            click.echo(f"{vm.name:<20} {vm.host}:{vm.port:<18} {'DOWN':<10} {'-':<6}")
 
 
 if __name__ == "__main__":
