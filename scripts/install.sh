@@ -1,7 +1,7 @@
 #!/bin/bash
 # GPU Monitor 설치 스크립트 (RHEL 8 / 폐쇄망)
 # 전제: git clone으로 프로젝트를 이미 받은 상태
-# 사용법: bash scripts/install.sh [--pypi-mirror URL]
+# 사용법: cd gpu-monitor && bash scripts/install.sh
 
 set -e
 set -o pipefail
@@ -12,21 +12,6 @@ SRC_DIR="${PROJECT_DIR}/src"
 VENV_DIR="${PROJECT_DIR}/venv"
 SERVICE_NAME="gpu-monitor"
 CONFIG_PATH="${PROJECT_DIR}/config.yaml"
-PYPI_MIRROR=""
-
-# 인자 파싱
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --pypi-mirror)
-            PYPI_MIRROR="$2"
-            shift 2
-            ;;
-        *)
-            echo "알 수 없는 인자: $1"
-            exit 1
-            ;;
-    esac
-done
 
 echo "========================================="
 echo "  GPU Monitor 설치"
@@ -40,15 +25,9 @@ source "${VENV_DIR}/bin/activate"
 
 # 2. 의존성 설치
 echo "[2/4] 의존성 설치"
-PIP_ARGS=""
-if [ -n "${PYPI_MIRROR}" ]; then
-    PIP_ARGS="-i ${PYPI_MIRROR} --trusted-host $(echo "${PYPI_MIRROR}" | sed 's|https\?://||' | cut -d/ -f1)"
-    echo "  PyPI 미러: ${PYPI_MIRROR}"
-fi
-
-pip install --upgrade pip ${PIP_ARGS}
+pip install --upgrade pip
 cd "${SRC_DIR}"
-pip install ${PIP_ARGS} -e .
+pip install -e .
 
 deactivate
 
