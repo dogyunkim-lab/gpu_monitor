@@ -1,0 +1,241 @@
+/* GPU Monitor Dashboard Styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-card: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --accent-blue: #3b82f6;
+    --accent-green: #22c55e;
+    --accent-yellow: #eab308;
+    --accent-red: #ef4444;
+    --accent-purple: #a855f7;
+    --border: #475569;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+
+header {
+    background: var(--bg-secondary);
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+header h1 {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+header .status-bar {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.status-dot.up { background: var(--accent-green); }
+.status-dot.down { background: var(--accent-red); }
+
+/* Alert banner */
+.alert-banner {
+    background: var(--accent-red);
+    color: white;
+    padding: 10px 24px;
+    font-size: 13px;
+    display: none;
+}
+
+.alert-banner.active { display: block; }
+
+/* Main content */
+.main {
+    padding: 20px 24px;
+}
+
+.section-title {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+/* GPU Grid */
+.gpu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.gpu-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    transition: border-color 0.2s;
+}
+
+.gpu-card:hover {
+    border-color: var(--accent-blue);
+}
+
+.gpu-card.down {
+    opacity: 0.5;
+    border-color: var(--accent-red);
+}
+
+.gpu-card .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.gpu-card .host-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.gpu-card .gpu-id {
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.metric-row .label {
+    color: var(--text-secondary);
+}
+
+.metric-row .value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.metric-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-card);
+    border-radius: 2px;
+    margin-top: 2px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+.metric-bar .fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.fill-blue { background: var(--accent-blue); }
+.fill-green { background: var(--accent-green); }
+.fill-yellow { background: var(--accent-yellow); }
+.fill-red { background: var(--accent-red); }
+.fill-purple { background: var(--accent-purple); }
+
+/* Charts */
+.chart-section {
+    margin-bottom: 24px;
+}
+
+.chart-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+    gap: 16px;
+}
+
+.chart-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.chart-box h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.chart-box canvas {
+    width: 100%;
+    height: 200px;
+}
+
+/* Alerts list */
+.alert-list {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 24px;
+}
+
+.alert-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+
+.alert-item:last-child { border-bottom: none; }
+
+.alert-type {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.alert-type.gpu_util { background: var(--accent-yellow); color: #000; }
+.alert-type.temperature { background: var(--accent-red); color: #fff; }
+.alert-type.vram_util { background: var(--accent-purple); color: #fff; }
+
+.no-alerts {
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+    padding: 20px;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 16px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+}

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "gpu-monitor"
+version = "0.1.0"
+description = "DCGM exporter 기반 다중 GPU VM 통합 모니터링 도구"
+requires-python = ">=3.8"
+dependencies = [
+    "httpx>=0.24",
+    "pandas>=1.5",
+    "matplotlib>=3.5",
+    "pyyaml>=6.0",
+    "click>=8.0",
+    "flask>=2.3",
+    "prometheus-client>=0.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+gpu-monitor = "gpu_monitor.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]

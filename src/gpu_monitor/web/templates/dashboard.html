@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU Monitor Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+    <h1>GPU Monitor</h1>
+    <div class="status-bar">
+        <span id="vm-count">VM: 0/0</span>
+        <span id="gpu-count">GPU: 0</span>
+        <span id="last-update">최근 갱신: -</span>
+        <span id="recording-status"></span>
+    </div>
+</header>
+
+<div class="alert-banner" id="alert-banner"></div>
+
+<div class="main">
+    <!-- GPU Cards Grid -->
+    <div class="section-title">GPU Status</div>
+    <div class="gpu-grid" id="gpu-grid"></div>
+
+    <!-- Time-Series Charts -->
+    <div class="chart-section">
+        <div class="section-title">Time Series (최근 5분)</div>
+        <div class="chart-container">
+            <div class="chart-box">
+                <h3>Tensor Core Active</h3>
+                <canvas id="chart-tensor" width="480" height="200"></canvas>
+            </div>
+            <div class="chart-box">
+                <h3>Memory Bandwidth</h3>
+                <canvas id="chart-membw" width="480" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="section-title">Alerts</div>
+    <div class="alert-list" id="alert-list">
+        <div class="no-alerts">알림 없음</div>
+    </div>
+</div>
+
+<footer>GPU Monitor v0.1.0 — DCGM Exporter 기반 통합 모니터링</footer>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
