@@ -50,8 +50,8 @@ def dashboard():
 
 @app.route("/api/current")
 def api_current():
-    """현재 10 GPU 상태 JSON."""
-    latest = _storage.get_latest()
+    """현재 10 GPU 상태 JSON (인메모리 캐시에서 즉시 반환)."""
+    latest = _collector.get_latest_cached() if _collector else _storage.get_latest()
 
     # (host, gpu_id) 기준으로 그룹핑
     gpus = {}

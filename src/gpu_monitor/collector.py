@@ -49,6 +49,9 @@ class MetricCollector:
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
+        # 최신 메트릭 인메모리 캐시: {(host, gpu_id, metric_name): GpuMetric}
+        self._latest_cache: Dict[tuple, GpuMetric] = {}
+
     def scrape_vm(self, vm: VMConfig) -> List[GpuMetric]:
         """단일 VM에서 메트릭 스크레이핑."""
         ts = time.time()
@@ -92,6 +95,11 @@ class MetricCollector:
                 all_metrics.extend(metrics)
 
         if all_metrics:
+            # 인메모리 캐시 갱신
+            with self._lock:
+                for m in all_metrics:
+                    self._latest_cache[(m.host, m.gpu_id, m.metric_name)] = m
+
             self.storage.store_metrics(all_metrics)
             if self.on_metrics:
                 self.on_metrics(all_metrics)
@@ -132,6 +140,20 @@ class MetricCollector:
             self._thread.join(timeout=5)
             self._thread = None
         logger.info("Collector 중지됨")
+
+    def get_latest_cached(self) -> List[Dict]:
+        """인메모리 캐시에서 최신 메트릭 반환 (DB 조회 없음)."""
+        with self._lock:
+            return [
+                {
+                    "timestamp": m.timestamp,
+                    "host": m.host,
+                    "gpu_id": m.gpu_id,
+                    "metric_name": m.metric_name,
+                    "value": m.value,
+                }
+                for m in self._latest_cache.values()
+            ]
 
     def get_vm_statuses(self) -> Dict[str, VMStatus]:
         """모든 VM 상태 반환."""
