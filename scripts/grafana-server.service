@@ -1,0 +1,17 @@
+[Unit]
+Description=Grafana Dashboard Server
+Wants=network-online.target
+After=network-online.target prometheus.service
+
+[Service]
+Type=simple
+User=grafana
+Group=grafana
+ExecStart=/opt/grafana/bin/grafana-server \
+    --homepath=/opt/grafana \
+    --config=/etc/grafana/grafana.ini
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
