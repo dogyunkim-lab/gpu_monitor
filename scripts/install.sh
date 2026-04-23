@@ -22,13 +22,14 @@ echo "========================================="
 echo "  프로젝트 경로: ${PROJECT_DIR}"
 
 # 1. Python venv 생성
-echo "[1/5] Python venv 생성: ${VENV_DIR}"
-python3 -m venv "${VENV_DIR}"
+echo "[1/5] Python 3.12 venv 생성: ${VENV_DIR}"
+rm -rf "${VENV_DIR}"
+python3.12 -m venv "${VENV_DIR}"
 source "${VENV_DIR}/bin/activate"
 
 # 2. 의존성 설치
 echo "[2/5] 의존성 설치"
-pip install --upgrade pip
+python3.12 -m pip install --upgrade pip
 cd "${SRC_DIR}"
 pip install -e .
 
