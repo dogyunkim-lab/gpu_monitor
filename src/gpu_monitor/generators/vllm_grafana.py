@@ -32,7 +32,7 @@ def generate_vllm_grafana_dashboard(config: AppConfig, output_dir: Path | None =
 # ---------- helpers ----------
 
 def _ds() -> dict:
-    return {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}
+    return {"type": "prometheus"}
 
 
 def _panel(id_: int, title: str, type_: str, targets: list, gridPos: dict, **extra) -> dict:
@@ -68,14 +68,6 @@ def _build_dashboard() -> dict:
     panels = _build_panels()
 
     return {
-        "__inputs": [
-            {
-                "name": "DS_PROMETHEUS",
-                "label": "Prometheus",
-                "type": "datasource",
-                "pluginId": "prometheus",
-            },
-        ],
         "uid": "vllm-monitor",
         "title": "vLLM Inference Monitor",
         "tags": ["vllm", "llm", "inference"],
@@ -85,12 +77,6 @@ def _build_dashboard() -> dict:
         "time": {"from": "now-1h", "to": "now"},
         "templating": {
             "list": [
-                {
-                    "name": "DS_PROMETHEUS",
-                    "type": "datasource",
-                    "query": "prometheus",
-                    "current": {"text": "Prometheus", "value": "Prometheus"},
-                },
                 {
                     "name": "model",
                     "label": "Model",
