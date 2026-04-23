@@ -83,14 +83,42 @@ def gen_grafana(ctx, output):
         click.echo(f"생성됨: {path}")
 
 
+@generate.command("vllm-prometheus")
+@click.option("-o", "--output", default=None, help="출력 디렉토리")
+@click.pass_context
+def gen_vllm_prometheus(ctx, output):
+    """vLLM Prometheus scrape config 생성."""
+    from gpu_monitor.generators.vllm_prometheus import generate_vllm_prometheus_config
+
+    config = ctx.obj["config"]
+    out = Path(output) if output else None
+    path = generate_vllm_prometheus_config(config, output_dir=out)
+    click.echo(f"생성됨: {path}")
+
+
+@generate.command("vllm-grafana")
+@click.option("-o", "--output", default=None, help="출력 디렉토리")
+@click.pass_context
+def gen_vllm_grafana(ctx, output):
+    """vLLM Grafana 대시보드 JSON 생성."""
+    from gpu_monitor.generators.vllm_grafana import generate_vllm_grafana_dashboard
+
+    config = ctx.obj["config"]
+    out = Path(output) if output else None
+    paths = generate_vllm_grafana_dashboard(config, output_dir=out)
+    for label, path in paths.items():
+        click.echo(f"생성됨: {path}")
+
+
 @generate.command("all")
 @click.option("-o", "--output", default=None, help="출력 루트 디렉토리")
 @click.pass_context
 def gen_all(ctx, output):
-    """prometheus.yml + alert rules + Grafana 설정 모두 생성."""
+    """prometheus.yml + alert rules + Grafana + vLLM 설정 모두 생성."""
     from gpu_monitor.generators.prometheus import generate_prometheus_config
     from gpu_monitor.generators.alerts import generate_alert_rules
     from gpu_monitor.generators.grafana import generate_grafana_provisioning
+    from gpu_monitor.generators.vllm_grafana import generate_vllm_grafana_dashboard
 
     config = ctx.obj["config"]
     out = Path(output) if output else None
@@ -107,6 +135,11 @@ def gen_all(ctx, output):
     paths = generate_grafana_provisioning(config, output_dir=grafana_out)
     for label, path in paths.items():
         click.echo(f"생성됨: {path}")
+
+    if config.vllm.models:
+        vpaths = generate_vllm_grafana_dashboard(config, output_dir=grafana_out)
+        for label, path in vpaths.items():
+            click.echo(f"생성됨: {path}")
 
     click.echo("\n모든 설정 파일 생성 완료.")
 
@@ -183,6 +216,32 @@ def status(ctx):
                 click.echo(f"{vm.name:<20} {vm.host}:{vm.port:<18} {'HTTP ' + str(resp.status_code):<10} {'-':<6}")
         except httpx.RequestError:
             click.echo(f"{vm.name:<20} {vm.host}:{vm.port:<18} {'DOWN':<10} {'-':<6}")
+
+
+# ---------- vllm-status ----------
+
+@main.command("vllm-status")
+@click.pass_context
+def vllm_status(ctx):
+    """각 vLLM 서버 /metrics 연결 확인."""
+    config = ctx.obj["config"]
+
+    if not config.vllm.models:
+        click.echo("설정된 vLLM 모델이 없습니다.")
+        return
+
+    click.echo(f"{'Model':<25} {'Host:Port':<25} {'Status':<10}")
+    click.echo("-" * 60)
+
+    for m in config.vllm.models:
+        try:
+            resp = httpx.get(m.metrics_url, timeout=3.0)
+            if resp.status_code == 200 and "vllm:" in resp.text:
+                click.echo(f"{m.model_name:<25} {m.target:<25} {'UP':<10}")
+            else:
+                click.echo(f"{m.model_name:<25} {m.target:<25} {'HTTP ' + str(resp.status_code):<10}")
+        except httpx.RequestError:
+            click.echo(f"{m.model_name:<25} {m.target:<25} {'DOWN':<10}")
 
 
 if __name__ == "__main__":

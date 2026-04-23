@@ -8,7 +8,7 @@ import pytest
 # src/ 를 import path에 추가
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from gpu_monitor.config import AppConfig, VMConfig, AlertConfig, PrometheusConfig, GrafanaConfig
+from gpu_monitor.config import AppConfig, VMConfig, AlertConfig, PrometheusConfig, GrafanaConfig, VLLMConfig, VLLMModelConfig
 
 
 @pytest.fixture

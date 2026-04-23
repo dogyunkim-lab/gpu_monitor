@@ -51,6 +51,30 @@ def generate_prometheus_config(config: AppConfig, output_dir: Path | None = None
         ],
     }
 
+    # vLLM 모델이 설정되어 있으면 vllm scrape config를 prometheus.yml에 직접 포함
+    if config.vllm.models:
+        vc = config.vllm
+        vllm_static_configs = []
+        for m in vc.models:
+            entry: dict = {"targets": [m.target], "labels": {"model_name": m.model_name}}
+            if m.gpu_vm:
+                entry["labels"]["gpu_vm"] = m.gpu_vm
+            vllm_static_configs.append(entry)
+
+        prom_config["scrape_configs"].append({
+            "job_name": vc.job_name,
+            "scrape_interval": vc.scrape_interval,
+            "metrics_path": "/metrics",
+            "static_configs": vllm_static_configs,
+            "relabel_configs": [
+                {
+                    "source_labels": ["__address__"],
+                    "regex": "([^:]+):\\d+",
+                    "target_label": "instance",
+                },
+            ],
+        })
+
     filepath = out / "prometheus.yml"
     with open(filepath, "w", encoding="utf-8", newline="\n") as f:
         yaml.dump(prom_config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)

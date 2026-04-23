@@ -52,11 +52,35 @@ class GrafanaConfig:
 
 
 @dataclass
+class VLLMModelConfig:
+    host: str
+    port: int = 8000
+    model_name: str = ""
+    gpu_vm: str = ""
+
+    @property
+    def metrics_url(self) -> str:
+        return f"http://{self.host}:{self.port}/metrics"
+
+    @property
+    def target(self) -> str:
+        return f"{self.host}:{self.port}"
+
+
+@dataclass
+class VLLMConfig:
+    models: List[VLLMModelConfig] = field(default_factory=list)
+    scrape_interval: str = "1s"
+    job_name: str = "vllm"
+
+
+@dataclass
 class AppConfig:
     vms: List[VMConfig] = field(default_factory=list)
     alerts: AlertConfig = field(default_factory=AlertConfig)
     prometheus: PrometheusConfig = field(default_factory=PrometheusConfig)
     grafana: GrafanaConfig = field(default_factory=GrafanaConfig)
+    vllm: VLLMConfig = field(default_factory=VLLMConfig)
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
@@ -76,9 +100,14 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     prometheus = PrometheusConfig(**raw.get("prometheus", {}))
     grafana = GrafanaConfig(**raw.get("grafana", {}))
 
+    vllm_raw = raw.get("vllm", {})
+    vllm_models = [VLLMModelConfig(**m) for m in vllm_raw.pop("models", [])]
+    vllm = VLLMConfig(models=vllm_models, **vllm_raw)
+
     return AppConfig(
         vms=vms,
         alerts=alerts,
         prometheus=prometheus,
         grafana=grafana,
+        vllm=vllm,
     )
