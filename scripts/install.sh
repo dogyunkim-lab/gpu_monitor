@@ -75,8 +75,9 @@ if [ -d "${OUTPUT_DIR}/grafana" ]; then
         "${GRAFANA_CONF_DIR}/provisioning/datasources/prometheus.yml"
     sudo cp "${OUTPUT_DIR}/grafana/provisioning/dashboards/default.yml" \
         "${GRAFANA_CONF_DIR}/provisioning/dashboards/default.yml"
-    sudo cp "${OUTPUT_DIR}/grafana/dashboards/gpu-cluster.json" \
-        "${GRAFANA_CONF_DIR}/dashboards/gpu-cluster.json"
+    # 모든 대시보드 JSON 복사 (gpu-cluster.json + vllm-monitor.json)
+    sudo cp "${OUTPUT_DIR}"/grafana/dashboards/*.json \
+        "${GRAFANA_CONF_DIR}/dashboards/"
 
     if systemctl is-active --quiet grafana-server; then
         echo "  Grafana 재시작"
