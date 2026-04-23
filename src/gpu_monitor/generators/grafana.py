@@ -62,7 +62,7 @@ def generate_grafana_provisioning(config: AppConfig, output_dir: Path | None = N
                 "disableDeletion": False,
                 "updateIntervalSeconds": 10,
                 "options": {
-                    "path": str(out / "dashboards"),
+                    "path": str((out / "dashboards").resolve()),
                     "foldersFromFilesStructure": False,
                 },
             },
