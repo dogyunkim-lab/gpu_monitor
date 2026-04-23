@@ -27,7 +27,7 @@ alerts:
   power_threshold: 350.0         # 전력 경고 (W)
 
 prometheus:
-  output_dir: "/etc/prometheus"
+  output_dir: "/opt/prometheus/prometheus-2.55.0.linux-amd64"
   scrape_interval: "5s"
   evaluation_interval: "15s"
   job_name: "dcgm"

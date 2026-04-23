@@ -13,7 +13,7 @@ VENV_DIR="${PROJECT_DIR}/venv"
 CONFIG_PATH="${PROJECT_DIR}/config.yaml"
 OUTPUT_DIR="${PROJECT_DIR}/output"
 
-PROMETHEUS_CONF_DIR="/etc/prometheus"
+PROMETHEUS_CONF_DIR="/opt/prometheus/prometheus-2.55.0.linux-amd64"
 GRAFANA_CONF_DIR="/etc/grafana"
 
 echo "========================================="
