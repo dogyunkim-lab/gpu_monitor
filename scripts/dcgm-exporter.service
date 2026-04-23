@@ -1,0 +1,12 @@
+[Unit]
+Description=DCGM Exporter for Prometheus
+After=nvidia-dcgm.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/dcgm-exporter --collect-interval 1000
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

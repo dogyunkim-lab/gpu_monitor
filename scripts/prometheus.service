@@ -7,10 +7,7 @@ After=network-online.target
 Type=simple
 User=prometheus
 Group=prometheus
-ExecStart=/opt/prometheus/prometheus \
-    --config.file=/etc/prometheus/prometheus.yml \
-    --storage.tsdb.path=/opt/prometheus/data \
-    --web.listen-address=:9090
+ExecStart=/opt/prometheus/prometheus-2.55.0.linux-amd64/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/opt/prometheus/prometheus-2.55.0.linux-amd64/data --web.listen-address=:9090
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
