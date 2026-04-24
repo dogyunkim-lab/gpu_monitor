@@ -129,7 +129,7 @@ class TestVLLMGrafanaGenerator:
         dashboard = json.loads(paths["dashboard_json"].read_text())
 
         assert dashboard["uid"] == "vllm-monitor"
-        assert dashboard["title"] == "vLLM Inference Monitor"
+        assert dashboard["title"] == "vLLM 병목 진단 (Bottleneck Diagnosis)"
         assert "vllm" in dashboard["tags"]
         assert dashboard["refresh"] == "5s"
 
@@ -141,7 +141,6 @@ class TestVLLMGrafanaGenerator:
         var_names = [v["name"] for v in dashboard["templating"]["list"]]
         assert "model" in var_names
         assert "instance" in var_names
-        assert "DS_PROMETHEUS" in var_names
 
     def test_panel_count(self, vllm_config, tmp_path):
         out = tmp_path / "grafana"
@@ -149,8 +148,8 @@ class TestVLLMGrafanaGenerator:
         dashboard = json.loads(paths["dashboard_json"].read_text())
 
         panels = dashboard["panels"]
-        # 5 rows + 5(overview) + 3(latency) + 4(queue) + 3(token) + 3(cache) = 23
-        assert len(panels) >= 20
+        # 3 rows + 10 panels = 13
+        assert len(panels) == 13
 
     def test_panel_types(self, vllm_config, tmp_path):
         out = tmp_path / "grafana"
@@ -169,11 +168,10 @@ class TestVLLMGrafanaGenerator:
         dashboard = json.loads(paths["dashboard_json"].read_text())
 
         row_titles = [p["title"] for p in dashboard["panels"] if p["type"] == "row"]
-        assert "Overview" in row_titles
-        assert "Latency" in row_titles
-        assert "Queue & Processing" in row_titles
-        assert "Token Distribution" in row_titles
-        assert "Cache & Success" in row_titles
+        assert "한눈에 보는 상태" in row_titles
+        assert "지연 시간 분석" in row_titles
+        assert "리소스 & 처리량" in row_titles
+        assert len(row_titles) == 3
 
     def test_vllm_metrics_used(self, vllm_config, tmp_path):
         """핵심 vLLM 메트릭이 대시보드에 포함되어 있는지 확인."""
@@ -189,7 +187,9 @@ class TestVLLMGrafanaGenerator:
             "vllm:gpu_cache_usage_perc",
             "vllm:prompt_tokens_total",
             "vllm:generation_tokens_total",
-            "vllm:request_success_total",
+            "vllm:request_queue_time_seconds",
+            "vllm:request_prompt_tokens_bucket",
+            "vllm:request_generation_tokens_bucket",
         ]
         for metric in key_metrics:
             assert metric in dashboard_text, f"Missing metric: {metric}"
@@ -200,6 +200,14 @@ class TestVLLMGrafanaGenerator:
         paths = generate_vllm_grafana_dashboard(vllm_config, output_dir=out)
         dashboard_text = paths["dashboard_json"].read_text()
         assert 'model_name=~\\"$model\\"' in dashboard_text
+
+    def test_no_quadruple_braces_in_legends(self, vllm_config, tmp_path):
+        """범례에 4중 중괄호가 없는지 확인 (Grafana는 {{label}}을 기대)."""
+        out = tmp_path / "grafana"
+        paths = generate_vllm_grafana_dashboard(vllm_config, output_dir=out)
+        dashboard_text = paths["dashboard_json"].read_text()
+        assert "{{{{" not in dashboard_text, "Quadruple braces found in dashboard JSON"
+        assert "}}}}" not in dashboard_text, "Quadruple braces found in dashboard JSON"
 
 
 # ---------- config loading with vllm ----------
