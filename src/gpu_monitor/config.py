@@ -75,12 +75,21 @@ class VLLMConfig:
 
 
 @dataclass
+class NodeExporterConfig:
+    enabled: bool = False
+    port: int = 9100
+    scrape_interval: str = "5s"
+    job_name: str = "node"
+
+
+@dataclass
 class AppConfig:
     vms: List[VMConfig] = field(default_factory=list)
     alerts: AlertConfig = field(default_factory=AlertConfig)
     prometheus: PrometheusConfig = field(default_factory=PrometheusConfig)
     grafana: GrafanaConfig = field(default_factory=GrafanaConfig)
     vllm: VLLMConfig = field(default_factory=VLLMConfig)
+    node_exporter: NodeExporterConfig = field(default_factory=NodeExporterConfig)
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
@@ -104,10 +113,13 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     vllm_models = [VLLMModelConfig(**m) for m in vllm_raw.pop("models", [])]
     vllm = VLLMConfig(models=vllm_models, **vllm_raw)
 
+    node_exporter = NodeExporterConfig(**raw.get("node_exporter", {}))
+
     return AppConfig(
         vms=vms,
         alerts=alerts,
         prometheus=prometheus,
         grafana=grafana,
         vllm=vllm,
+        node_exporter=node_exporter,
     )

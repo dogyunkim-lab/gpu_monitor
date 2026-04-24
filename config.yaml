@@ -39,6 +39,13 @@ grafana:
   datasource_url: "http://127.0.0.1:9090"
   dashboard_title: "GPU Cluster Monitor"
 
+# node_exporter (CPU/메모리/디스크 모니터링)
+# vms에 정의된 호스트에서 node_exporter가 실행 중이어야 함
+node_exporter:
+  enabled: true
+  port: 9100                    # node_exporter 기본 포트
+  scrape_interval: "5s"
+
 # vLLM 서버 모니터링
 vllm:
   scrape_interval: "1s"

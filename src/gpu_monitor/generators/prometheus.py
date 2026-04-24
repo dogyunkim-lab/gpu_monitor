@@ -75,6 +75,24 @@ def generate_prometheus_config(config: AppConfig, output_dir: Path | None = None
             ],
         })
 
+    # node_exporter가 활성화되어 있으면 node scrape job 추가 (vms 호스트 재사용)
+    nc = config.node_exporter
+    if nc.enabled and config.vms:
+        node_targets = [f"{vm.host}:{nc.port}" for vm in config.vms]
+        prom_config["scrape_configs"].append({
+            "job_name": nc.job_name,
+            "scrape_interval": nc.scrape_interval,
+            "metrics_path": "/metrics",
+            "static_configs": [{"targets": node_targets}],
+            "relabel_configs": [
+                {
+                    "source_labels": ["__address__"],
+                    "regex": "([^:]+):\\d+",
+                    "target_label": "vm",
+                },
+            ],
+        })
+
     filepath = out / "prometheus.yml"
     with open(filepath, "w", encoding="utf-8", newline="\n") as f:
         yaml.dump(prom_config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)

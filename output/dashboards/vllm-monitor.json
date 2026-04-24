@@ -1086,6 +1086,210 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 21,
+      "type": "row",
+      "title": "CPU & 프로세스 모니터링",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "collapsed": false
+    },
+    {
+      "id": 22,
+      "title": "VM CPU 사용률 (%)",
+      "description": "각 VM의 전체 CPU 사용률.\nvLLM v1은 API server + Engine Core + GPU Worker가\n별도 프로세스로 동작하여 CPU를 경쟁.\n\n판정 기준:\n· 80%+ 지속 → CPU 경합으로 API server 지연 발생\n· E2E gap이 큰 시점과 CPU 피크가 겹치면 CPU 병목 확정",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "100 - (avg by (vm) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "{{vm}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Load Average (1분) vs CPU 코어",
+      "description": "1분 평균 부하와 CPU 코어 수 비교.\nLoad > 코어 수 → 프로세스가 CPU를 기다리는 상태.\n\nvLLM TP=2 기준 최소 4 코어 필요:\n  1 API server + 1 Engine Core + 2 GPU Worker\n코어 부족 시 Engine Core(busy loop)가 CPU를 독점하여\nAPI server가 starve → 토크나이저/스트리밍 지연",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "node_load1",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "Load 1분 평균"
+        },
+        {
+          "expr": "count(count by (cpu) (node_cpu_seconds_total{mode=\"idle\"}))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "CPU 코어 수"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "vLLM 프로세스 CPU 사용률",
+      "description": "vLLM API server 프로세스의 CPU 사용 시간 변화율.\n(prometheus_client가 자동 노출하는 process_cpu_seconds_total)\n\n판정 기준:\n· 값이 1.0 = CPU 1코어를 100% 점유\n· E2E gap이 큰 시점에 이 값이 높으면\n  API server가 토크나이즈/스트리밍에 CPU를 다 쓰는 것\n· --api-server-count 늘리면 분산 가능",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "vLLM CPU (코어 단위)"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 53
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ],
   "schemaVersion": 39,
