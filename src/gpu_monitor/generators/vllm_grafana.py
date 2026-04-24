@@ -47,7 +47,7 @@ _IV = "$interval"
 
 
 def _ds() -> dict:
-    return {"type": "prometheus"}
+    return {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}
 
 
 def _target(expr: str, legend: str = "", ref: str = "A", fmt: str = "") -> dict:
@@ -149,6 +149,12 @@ def _ts_panel(
 
 def _build_dashboard() -> dict:
     return {
+        "__inputs": [{
+            "name": "DS_PROMETHEUS",
+            "label": "Prometheus",
+            "type": "datasource",
+            "pluginId": "prometheus",
+        }],
         "uid": "vllm-monitor",
         "title": "vLLM 서비스 모니터링 & 진단",
         "tags": ["vllm", "llm", "inference", "diagnostic"],
@@ -157,6 +163,12 @@ def _build_dashboard() -> dict:
         "refresh": "5s",
         "time": {"from": "now-30m", "to": "now"},
         "templating": {"list": [
+            {
+                "name": "DS_PROMETHEUS",
+                "type": "datasource",
+                "query": "prometheus",
+                "current": {"text": "Prometheus", "value": "Prometheus"},
+            },
             {
                 "name": "model", "label": "모델",
                 "type": "query", "datasource": _ds(),

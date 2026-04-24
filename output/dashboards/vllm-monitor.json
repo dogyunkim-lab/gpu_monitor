@@ -1,4 +1,12 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
   "uid": "vllm-monitor",
   "title": "vLLM 서비스 모니터링 & 진단",
   "tags": [
@@ -17,11 +25,21 @@
   "templating": {
     "list": [
       {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        }
+      },
+      {
         "name": "model",
         "label": "모델",
         "type": "query",
         "datasource": {
-          "type": "prometheus"
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
         },
         "query": "label_values(vllm:num_requests_running, model_name)",
         "includeAll": true,
@@ -36,7 +54,8 @@
         "label": "서버",
         "type": "query",
         "datasource": {
-          "type": "prometheus"
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
         },
         "query": "label_values(vllm:num_requests_running, instance)",
         "includeAll": true,
@@ -80,13 +99,15 @@
       "description": "현재 GPU에서 추론이 진행 중인 요청 수.\n이 값이 높으면 서버가 활발히 일하고 있는 상태.",
       "type": "stat",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "sum(vllm:num_requests_running{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A"
         }
@@ -133,13 +154,15 @@
       "description": "GPU 자원(KV Cache) 부족으로 큐에서 대기 중인 요청 수.\n0이 정상. 지속적으로 높으면 서버 증설 필요.",
       "type": "stat",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "sum(vllm:num_requests_waiting{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A"
         }
@@ -186,13 +209,15 @@
       "description": "요청 후 첫 토큰 생성까지 걸리는 시간.\n사용자 체감 '대기 시간'에 해당.\np90 = 전체 요청의 90%가 이 시간 이내.",
       "type": "stat",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "histogram_quantile(0.9, sum(rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A"
         }
@@ -239,13 +264,15 @@
       "description": "GPU 메모리에서 KV Cache가 차지하는 비율.\n90% 이상이면 새 요청을 받을 수 없어 큐에 쌓이기 시작.\nPreemption 없이도 처리량이 크게 저하됨.",
       "type": "gauge",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "avg(vllm:gpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A"
         }
@@ -299,13 +326,15 @@
       "description": "쌓인 영역(큐 대기 + 프리필 + 디코드)과 빨간 점선(E2E 전체)의 차이가\n'phantom time' — 메트릭에 잡히지 않는 소요 시간.\n\n판정 기준:\n· gap < 1초: 정상. 시간 성분이 잘 맞음\n· gap 10~30초: 엔진 내부 대기 (chunked prefill 청크 사이 등)\n· gap > 30초: 엔진 외부 문제 의심 → 'Inference vs E2E' 패널 확인",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "histogram_quantile(0.9, sum(rate(vllm:request_queue_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "큐 대기 (p90)"
@@ -313,7 +342,8 @@
         {
           "expr": "histogram_quantile(0.9, sum(rate(vllm:request_prefill_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "프리필 연산 (p90)"
@@ -321,7 +351,8 @@
         {
           "expr": "histogram_quantile(0.9, sum(rate(vllm:request_decode_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "C",
           "legendFormat": "디코드 연산 (p90)"
@@ -329,7 +360,8 @@
         {
           "expr": "histogram_quantile(0.9, sum(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "D",
           "legendFormat": "E2E 전체 (p90)"
@@ -431,13 +463,15 @@
       "description": "요청당 프롬프트(입력) 토큰 수의 분포.\n\n판정 기준:\n· p50 vs p99 격차 10배 이상 → 롱테일 존재\n  → p90 TTFT가 긴 프롬프트 요청들에 의해 끌어올려진 것\n· p99 > 50k → 롱테일이 TTFT 악화의 주범\n· p99 < 10k → 롱테일 아님, 다른 원인",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "histogram_quantile(0.5,  sum(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[5m])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "중앙값 (p50)"
@@ -445,7 +479,8 @@
         {
           "expr": "histogram_quantile(0.9,  sum(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[5m])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "p90"
@@ -453,7 +488,8 @@
         {
           "expr": "histogram_quantile(0.99, sum(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[5m])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "C",
           "legendFormat": "p99"
@@ -461,7 +497,8 @@
         {
           "expr": "histogram_quantile(1.0,  sum(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[5m])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "D",
           "legendFormat": "최대값 (max)"
@@ -507,13 +544,15 @@
       "description": "스케줄러 1회 실행(iteration)에서 처리하는 토큰 수.\nChunked prefill의 청크 크기를 간접 반영.\n\n판정 기준:\n· p90 ≈ 2048 → 기본 청크 크기 사용 중\n· --max-num-batched-tokens를 16384로 올리면 이 값도 증가해야 함\n· 너무 작으면 스케줄링 오버헤드 누적",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "histogram_quantile(0.5,  sum(rate(vllm:iteration_tokens_total_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "중앙값 (p50)"
@@ -521,7 +560,8 @@
         {
           "expr": "histogram_quantile(0.9,  sum(rate(vllm:iteration_tokens_total_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "p90"
@@ -529,7 +569,8 @@
         {
           "expr": "histogram_quantile(0.99, sum(rate(vllm:iteration_tokens_total_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "C",
           "legendFormat": "p99"
@@ -587,13 +628,15 @@
       "description": "실행 중, 대기 중, 스왑된 요청 수의 시계열.\n\n판정 기준:\n· waiting 쌓이는데 Queue Wait이 10us → 메트릭 정의 불일치\n· swapped ≠ 0 → CPU 스왑 발생 (preemption 카운터에 안 잡힘)",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "sum(vllm:num_requests_running{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "실행 중"
@@ -601,7 +644,8 @@
         {
           "expr": "sum(vllm:num_requests_waiting{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "대기 중"
@@ -609,7 +653,8 @@
         {
           "expr": "sum(vllm:num_requests_swapped{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "C",
           "legendFormat": "스왑됨"
@@ -658,13 +703,15 @@
       "description": "GPU 및 CPU KV Cache 점유율 변화.\n\n판정 기준:\n· GPU > 90% 지속 + waiting 쌓임 → 메모리 병목\n  → FP8 전환 또는 max_model_len 축소 고려\n· waiting 0 + KV < 70% → 리소스 여유, 튜닝 이슈 아님",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "vllm:gpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"}",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "GPU KV Cache"
@@ -672,7 +719,8 @@
         {
           "expr": "vllm:cpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"}",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "CPU KV Cache"
@@ -739,13 +787,15 @@
       "description": "Preemption(요청 중단 후 재계산) 발생 빈도.\n\n판정 기준:\n· 0 유지 → preemption이 원인은 아님\n· 간헐적 스파이크 → KV 압박 시 발생\n· rate = 초당 횟수, increase = 5분 누적",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "rate(vllm:num_preemptions_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval])",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "Preemption/초"
@@ -753,7 +803,8 @@
         {
           "expr": "increase(vllm:num_preemptions_total{model_name=~\"$model\", instance=~\"$instance\"}[5m])",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "5분간 누적"
@@ -811,13 +862,15 @@
       "description": "초당 처리하는 토큰 수.\n\n· 입력(prefill) = 프롬프트 토큰 처리 속도\n· 생성(decode) = 새 토큰 생성 속도\n\n판정 기준:\n· prefill < 1000 tok/s → GPU 포화\n· 정상 범위인데 느림 → 파이프라인(스케줄링) 병목",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "입력 토큰/초 (prefill)"
@@ -825,7 +878,8 @@
         {
           "expr": "sum(rate(vllm:generation_tokens_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "생성 토큰/초 (decode)"
@@ -871,13 +925,15 @@
       "description": "vLLM 엔진 내부 추론 시간과 E2E 전체 시간 비교.\n두 선의 차이 = 엔진 밖에서 소모되는 시간.\n(API server, 토크나이저, 네트워크, detokenize 등)\n\n판정 기준:\n· 차이 작음 → vLLM 내부 문제\n· 차이 50초+ → vLLM 밖(Dify API layer 등) 병목",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "histogram_quantile(0.9, sum(rate(vllm:request_inference_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "추론 시간 (p90)"
@@ -885,7 +941,8 @@
         {
           "expr": "histogram_quantile(0.9, sum(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
           "legendFormat": "E2E 전체 (p90)"
@@ -943,13 +1000,15 @@
       "description": "TTFT의 실제 분포를 시간축으로 표시.\n\n판정 기준:\n· 이중 분포(bimodal) → 요청 유형이 2종류 (짧은/긴)\n· 특정 시간대에 상위 버킷 채워짐 → 트래픽 피크 시 악화\n· 색이 진한 영역 = 대부분의 요청이 걸리는 시간대",
       "type": "heatmap",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "sum(increase(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le)",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "{{le}}",
@@ -980,13 +1039,15 @@
       "description": "초당 완료된 요청 수.\n\n· 요청 실패/타임아웃이 있으면 레이턴시 분포를 왜곡\n· 급격한 하락 → 서버 장애 또는 OOM 의심",
       "type": "timeseries",
       "datasource": {
-        "type": "prometheus"
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "targets": [
         {
           "expr": "sum(rate(vllm:request_success_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
           "datasource": {
-            "type": "prometheus"
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
           "legendFormat": "성공 요청/초"
