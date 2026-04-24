@@ -261,7 +261,7 @@
     {
       "id": 5,
       "title": "KV Cache 사용률",
-      "description": "GPU 메모리에서 KV Cache가 차지하는 비율.\n90% 이상이면 새 요청 큐에 쌓이기 시작.\n지표: vllm:gpu_cache_usage_perc",
+      "description": "GPU 메모리에서 KV Cache가 차지하는 비율.\n90% 이상이면 새 요청 큐에 쌓이기 시작.\n지표: vllm:kv_cache_usage_perc",
       "type": "gauge",
       "datasource": {
         "type": "prometheus",
@@ -269,7 +269,7 @@
       },
       "targets": [
         {
-          "expr": "avg(vllm:gpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
+          "expr": "avg(vllm:kv_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
@@ -726,18 +726,162 @@
     },
     {
       "id": 13,
+      "title": "GPU 연산 속도",
+      "description": "GPU 추정 FLOPS 및 메모리 읽기/쓰기 대역폭.\n지표: vllm:estimated_flops_per_gpu_total,\n  vllm:estimated_read/write_bytes_per_gpu_total\n\n· FLOPS 하락 → GPU 유휴 시간 증가 (스케줄링 문제)\n· 대역폭 포화 → 메모리 바운드 (KV Cache 크기 축소 고려)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:estimated_flops_per_gpu_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "FLOPS/s"
+        },
+        {
+          "expr": "sum(rate(vllm:estimated_read_bytes_per_gpu_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "읽기 bytes/s"
+        },
+        {
+          "expr": "sum(rate(vllm:estimated_write_bytes_per_gpu_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "쓰기 bytes/s"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "토큰 간 지연시간 — ITL (Inter-Token Latency)",
+      "description": "연속 토큰 사이의 지연시간. 스트리밍 체감 속도에 직접 영향.\n지표: vllm:inter_token_latency_seconds\n\n· p50 < 50ms → 자연스러운 스트리밍\n· p90 > 200ms → 사용자가 끊김을 체감\n· 스파이크 → 해당 시점에 prefill 간섭 (chunked prefill)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "중앙값 (p50)"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "p90"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
       "type": "row",
       "title": "요청 특성 분석",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 41
       },
       "collapsed": false
     },
     {
-      "id": 14,
+      "id": 16,
       "title": "프롬프트 토큰 수 분포",
       "description": "요청당 프롬프트(입력) 토큰 수의 분포.\n지표: vllm:request_prompt_tokens\n\n· p50 vs p99 격차 10배 이상 → 롱테일 존재\n· p99 > 50k → 롱테일이 TTFT 악화의 주범\n· p99 < 10k → 롱테일 아님, 다른 원인",
       "type": "timeseries",
@@ -778,7 +922,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 42
       },
       "fieldConfig": {
         "defaults": {
@@ -809,7 +953,7 @@
       }
     },
     {
-      "id": 15,
+      "id": 17,
       "title": "이터레이션당 처리 토큰 수",
       "description": "스케줄러 1회 실행(iteration)에서 처리하는 토큰 수.\n지표: vllm:iteration_tokens_total\n\nChunked prefill의 청크 크기를 간접 반영.\n· p90 ~ 2048 → 기본 청크 크기 사용 중\n· 너무 작으면 스케줄링 오버헤드 누적",
       "type": "timeseries",
@@ -850,7 +994,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 42
       },
       "fieldConfig": {
         "defaults": {
@@ -881,19 +1025,19 @@
       }
     },
     {
-      "id": 16,
+      "id": 18,
       "type": "row",
       "title": "동시성 & KV Cache",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 50
       },
       "collapsed": false
     },
     {
-      "id": 17,
+      "id": 19,
       "title": "동시 요청 수 (실행/대기/스왑)",
       "description": "실행 중, 대기 중, 스왑된 요청 수의 시계열.\n지표: vllm:num_requests_running/waiting/swapped\n\n· waiting 쌓이면 → KV Cache 부족\n· swapped != 0 → CPU 스왑 발생 (preemption 동반 가능)",
       "type": "timeseries",
@@ -934,7 +1078,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 51
       },
       "fieldConfig": {
         "defaults": {
@@ -968,9 +1112,9 @@
       }
     },
     {
-      "id": 18,
+      "id": 20,
       "title": "KV Cache 사용률 추이",
-      "description": "GPU 및 CPU KV Cache 점유율 변화.\n지표: vllm:gpu_cache_usage_perc, vllm:cpu_cache_usage_perc\n\n· GPU > 90% 지속 + waiting 쌓임 → 메모리 병목\n  → FP8 전환 또는 max_model_len 축소 고려\n· waiting 0 + KV < 70% → 리소스 여유",
+      "description": "KV Cache 점유율 변화.\n지표: vllm:kv_cache_usage_perc\n\n· 90% 이상 지속 + waiting 쌓임 → 메모리 병목\n  → FP8 전환 또는 max_model_len 축소 고려\n· waiting 0 + KV < 70% → 리소스 여유",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -978,29 +1122,20 @@
       },
       "targets": [
         {
-          "expr": "avg by (model_name, instance) (vllm:gpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
+          "expr": "avg by (model_name, instance) (vllm:kv_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
-          "legendFormat": "GPU {{model_name}} ({{instance}})"
-        },
-        {
-          "expr": "avg by (model_name, instance) (vllm:cpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "refId": "B",
-          "legendFormat": "CPU {{model_name}} ({{instance}})"
+          "legendFormat": "{{model_name}} ({{instance}})"
         }
       ],
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 51
       },
       "fieldConfig": {
         "defaults": {
@@ -1052,9 +1187,9 @@
       }
     },
     {
-      "id": 19,
-      "title": "KV Cache 블록 현황",
-      "description": "KV Cache 블록의 할당/여유 상태.\n지표: vllm:num_gpu_blocks_free/used, vllm:num_cpu_blocks_free/used\n\nGPU 블록이 소진되면 새 요청을 처리할 수 없음.\nCPU 블록은 스왑 대상.\n(vLLM 버전에 따라 미지원 시 No data)",
+      "id": 21,
+      "title": "Prefix Cache 활용률",
+      "description": "프리필 시 KV Cache에서 재사용한 토큰 비율.\n지표: vllm:request_prefill_kv_computed_tokens\n\n· 값이 높을수록 → 이전 요청의 KV 캐시 재활용 중\n· 반복 프롬프트가 많으면 높아져야 정상\n· 0이면 prefix caching 미사용 또는 캐시 미스",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1062,47 +1197,29 @@
       },
       "targets": [
         {
-          "expr": "sum(vllm:num_gpu_blocks_used{model_name=~\"$model\", instance=~\"$instance\"})",
+          "expr": "histogram_quantile(0.5, sum(rate(vllm:request_prefill_kv_computed_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
           "refId": "A",
-          "legendFormat": "GPU 사용 블록"
+          "legendFormat": "재사용 토큰 (p50)"
         },
         {
-          "expr": "sum(vllm:num_gpu_blocks_free{model_name=~\"$model\", instance=~\"$instance\"})",
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:request_prefill_kv_computed_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
           "refId": "B",
-          "legendFormat": "GPU 여유 블록"
-        },
-        {
-          "expr": "sum(vllm:num_cpu_blocks_used{model_name=~\"$model\", instance=~\"$instance\"})",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "refId": "C",
-          "legendFormat": "CPU 사용 블록"
-        },
-        {
-          "expr": "sum(vllm:num_cpu_blocks_free{model_name=~\"$model\", instance=~\"$instance\"})",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "refId": "D",
-          "legendFormat": "CPU 여유 블록"
+          "legendFormat": "재사용 토큰 (p90)"
         }
       ],
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 59
       },
       "fieldConfig": {
         "defaults": {
@@ -1133,9 +1250,9 @@
       }
     },
     {
-      "id": 20,
-      "title": "Preemption & Spec Decode",
-      "description": "Preemption(요청 중단 후 재계산) 빈도 + Speculative Decoding 효율.\n지표: vllm:num_preemptions_total, vllm:spec_decode_efficiency\n\nPreemption: 0 유지가 정상. 간헐적 스파이크 → KV 압박.\nSpec Decode: 1.0에 가까울수록 효율적.\n(Speculative Decoding 미사용 시 No data)",
+      "id": 22,
+      "title": "Preemption 발생률",
+      "description": "Preemption(요청 중단 후 재계산) 빈도.\n지표: vllm:num_preemptions_total\n\n· 0 유지 → 정상\n· 간헐적 스파이크 → KV Cache 압박\n· 지속 발생 → 메모리 부족, 서버 증설 필요",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1159,22 +1276,13 @@
           },
           "refId": "B",
           "legendFormat": "5분 누적"
-        },
-        {
-          "expr": "avg(vllm:spec_decode_efficiency{model_name=~\"$model\", instance=~\"$instance\"})",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "refId": "C",
-          "legendFormat": "Spec Decode 효율"
         }
       ],
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 51
+        "y": 59
       },
       "fieldConfig": {
         "defaults": {
@@ -1205,19 +1313,19 @@
       }
     },
     {
-      "id": 21,
+      "id": 23,
       "type": "row",
       "title": "CPU & 프로세스 모니터링",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 59
+        "y": 67
       },
       "collapsed": false
     },
     {
-      "id": 22,
+      "id": 24,
       "title": "VM CPU 사용률 (%)",
       "description": "각 VM의 전체 CPU 사용률 (node_exporter).\nvLLM v1은 API server + Engine Core + GPU Worker가\n별도 프로세스로 동작하여 CPU를 경쟁.\n\n· 80%+ 지속 → CPU 경합으로 API server 지연 발생\n· E2E gap이 큰 시점과 CPU 피크 겹치면 CPU 병목 확정\n\nNo data 시: node_exporter 설치 확인 (포트 9100)",
       "type": "timeseries",
@@ -1240,7 +1348,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 60
+        "y": 68
       },
       "fieldConfig": {
         "defaults": {
@@ -1292,7 +1400,7 @@
       }
     },
     {
-      "id": 23,
+      "id": 25,
       "title": "Load Average (1분) vs CPU 코어",
       "description": "1분 평균 부하와 CPU 코어 수 비교 (node_exporter).\nLoad > 코어 수 → 프로세스가 CPU를 기다리는 상태.\n\nvLLM TP=2 기준 최소 4 코어 필요:\n  1 API server + 1 Engine Core + 2 GPU Worker\n코어 부족 시 Engine Core(busy loop)가 CPU를 독점\n→ API server starve → 토크나이저/스트리밍 지연",
       "type": "timeseries",
@@ -1324,7 +1432,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 60
+        "y": 68
       },
       "fieldConfig": {
         "defaults": {
@@ -1355,7 +1463,7 @@
       }
     },
     {
-      "id": 24,
+      "id": 26,
       "title": "vLLM 프로세스 CPU 사용률",
       "description": "vLLM API server 프로세스의 CPU 사용 시간 변화율.\n지표: process_cpu_seconds_total\n\n· 값 1.0 = CPU 1코어를 100% 점유\n· E2E gap이 큰 시점에 높으면\n  API server가 토크나이즈/스트리밍에 CPU를 다 쓰는 것\n· --api-server-count 늘리면 분산 가능",
       "type": "timeseries",
@@ -1378,7 +1486,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 60
+        "y": 68
       },
       "fieldConfig": {
         "defaults": {

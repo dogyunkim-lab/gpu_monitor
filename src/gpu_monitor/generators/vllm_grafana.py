@@ -1,11 +1,11 @@
 """vLLM Grafana dashboard JSON 생성기 — 종합 모니터링 대시보드.
 
-대시보드 구성 (6개 섹션, 18개 패널):
+대시보드 구성 (7개 섹션, 21개 패널):
   1. 현재 상태 — 핵심 수치 4개
   2. E2E 시간 분해 — TTFT 포함 phantom time 시각화 + TTFT 히트맵
-  3. 처리량 — 요청/토큰 처리량, Inference vs E2E
+  3. 처리량 & GPU 성능 — 요청/토큰 처리량, GPU FLOPS, ITL
   4. 요청 특성 — 프롬프트/이터레이션 토큰 분포
-  5. 동시성 & KV Cache — 요청 상태, 캐시 블록, Preemption
+  5. 동시성 & KV Cache — 요청 상태, KV Cache, Prefix Cache, Preemption
   6. CPU & 프로세스 — VM CPU, Load Average, vLLM CPU
 """
 
@@ -252,8 +252,8 @@ def _build_panels() -> list:  # noqa: C901
     panels.append(_gauge_panel(pid, "KV Cache 사용률",
         "GPU 메모리에서 KV Cache가 차지하는 비율.\n"
         "90% 이상이면 새 요청 큐에 쌓이기 시작.\n"
-        "지표: vllm:gpu_cache_usage_perc",
-        f"avg(vllm:gpu_cache_usage_perc{f})",
+        "지표: vllm:kv_cache_usage_perc",
+        f"avg(vllm:kv_cache_usage_perc{f})",
         {"h": 4, "w": 6, "x": 18, "y": y},
         thresholds=[
             {"color": "green", "value": None},
@@ -385,6 +385,44 @@ def _build_panels() -> list:  # noqa: C901
         {"h": 8, "w": 8, "x": 16, "y": y},
     )); pid += 1; y += 8
 
+    # GPU 연산 속도 (FLOPS + 메모리 대역폭)
+    panels.append(_ts_panel(pid, "GPU 연산 속도",
+        "GPU 추정 FLOPS 및 메모리 읽기/쓰기 대역폭.\n"
+        "지표: vllm:estimated_flops_per_gpu_total,\n"
+        "  vllm:estimated_read/write_bytes_per_gpu_total\n\n"
+        "· FLOPS 하락 → GPU 유휴 시간 증가 (스케줄링 문제)\n"
+        "· 대역폭 포화 → 메모리 바운드 (KV Cache 크기 축소 고려)",
+        [
+            _target(f"sum(rate(vllm:estimated_flops_per_gpu_total{f}[{iv}]))",
+                    "FLOPS/s", "A"),
+            _target(f"sum(rate(vllm:estimated_read_bytes_per_gpu_total{f}[{iv}]))",
+                    "읽기 bytes/s", "B"),
+            _target(f"sum(rate(vllm:estimated_write_bytes_per_gpu_total{f}[{iv}]))",
+                    "쓰기 bytes/s", "C"),
+        ],
+        {"h": 8, "w": 12, "x": 0, "y": y},
+        unit="short",
+    )); pid += 1
+
+    # 토큰 간 지연시간 (ITL)
+    panels.append(_ts_panel(pid, "토큰 간 지연시간 — ITL (Inter-Token Latency)",
+        "연속 토큰 사이의 지연시간. 스트리밍 체감 속도에 직접 영향.\n"
+        "지표: vllm:inter_token_latency_seconds\n\n"
+        "· p50 < 50ms → 자연스러운 스트리밍\n"
+        "· p90 > 200ms → 사용자가 끊김을 체감\n"
+        "· 스파이크 → 해당 시점에 prefill 간섭 (chunked prefill)",
+        [
+            _target(f"histogram_quantile(0.5, sum(rate(vllm:inter_token_latency_seconds_bucket{f}[{iv}])) by (le))",
+                    "중앙값 (p50)", "A"),
+            _target(f"histogram_quantile(0.9, sum(rate(vllm:inter_token_latency_seconds_bucket{f}[{iv}])) by (le))",
+                    "p90", "B"),
+            _target(f"histogram_quantile(0.99, sum(rate(vllm:inter_token_latency_seconds_bucket{f}[{iv}])) by (le))",
+                    "p99", "C"),
+        ],
+        {"h": 8, "w": 12, "x": 12, "y": y},
+        unit="s",
+    )); pid += 1; y += 8
+
     # ================================================================
     # Section 4: 요청 특성 분석
     # ================================================================
@@ -446,18 +484,16 @@ def _build_panels() -> list:  # noqa: C901
         unit="none", stacking=True, fill=30,
     )); pid += 1
 
-    # KV Cache 사용률 추이 (GPU + CPU) — avg()로 감싸 No data 방지
+    # KV Cache 사용률 추이
     panels.append(_ts_panel(pid, "KV Cache 사용률 추이",
-        "GPU 및 CPU KV Cache 점유율 변화.\n"
-        "지표: vllm:gpu_cache_usage_perc, vllm:cpu_cache_usage_perc\n\n"
-        "· GPU > 90% 지속 + waiting 쌓임 → 메모리 병목\n"
+        "KV Cache 점유율 변화.\n"
+        "지표: vllm:kv_cache_usage_perc\n\n"
+        "· 90% 이상 지속 + waiting 쌓임 → 메모리 병목\n"
         "  → FP8 전환 또는 max_model_len 축소 고려\n"
         "· waiting 0 + KV < 70% → 리소스 여유",
         [
-            _target(f"avg by (model_name, instance) (vllm:gpu_cache_usage_perc{f})",
-                    "GPU {{model_name}} ({{instance}})", "A"),
-            _target(f"avg by (model_name, instance) (vllm:cpu_cache_usage_perc{f})",
-                    "CPU {{model_name}} ({{instance}})", "B"),
+            _target(f"avg by (model_name, instance) (vllm:kv_cache_usage_perc{f})",
+                    "{{model_name}} ({{instance}})", "A"),
         ],
         {"h": 8, "w": 12, "x": 12, "y": y},
         unit="percentunit", ymin=0, ymax=1,
@@ -468,34 +504,33 @@ def _build_panels() -> list:  # noqa: C901
         ],
     )); pid += 1; y += 8
 
-    # KV Cache 블록 현황
-    panels.append(_ts_panel(pid, "KV Cache 블록 현황",
-        "KV Cache 블록의 할당/여유 상태.\n"
-        "지표: vllm:num_gpu_blocks_free/used, vllm:num_cpu_blocks_free/used\n\n"
-        "GPU 블록이 소진되면 새 요청을 처리할 수 없음.\n"
-        "CPU 블록은 스왑 대상.\n"
-        "(vLLM 버전에 따라 미지원 시 No data)",
+    # Prefix Cache 활용률
+    panels.append(_ts_panel(pid, "Prefix Cache 활용률",
+        "프리필 시 KV Cache에서 재사용한 토큰 비율.\n"
+        "지표: vllm:request_prefill_kv_computed_tokens\n\n"
+        "· 값이 높을수록 → 이전 요청의 KV 캐시 재활용 중\n"
+        "· 반복 프롬프트가 많으면 높아져야 정상\n"
+        "· 0이면 prefix caching 미사용 또는 캐시 미스",
         [
-            _target(f"sum(vllm:num_gpu_blocks_used{f})", "GPU 사용 블록", "A"),
-            _target(f"sum(vllm:num_gpu_blocks_free{f})", "GPU 여유 블록", "B"),
-            _target(f"sum(vllm:num_cpu_blocks_used{f})", "CPU 사용 블록", "C"),
-            _target(f"sum(vllm:num_cpu_blocks_free{f})", "CPU 여유 블록", "D"),
+            _target(f"histogram_quantile(0.5, sum(rate(vllm:request_prefill_kv_computed_tokens_bucket{f}[{iv}])) by (le))",
+                    "재사용 토큰 (p50)", "A"),
+            _target(f"histogram_quantile(0.9, sum(rate(vllm:request_prefill_kv_computed_tokens_bucket{f}[{iv}])) by (le))",
+                    "재사용 토큰 (p90)", "B"),
         ],
         {"h": 8, "w": 12, "x": 0, "y": y},
         unit="none",
     )); pid += 1
 
-    # Preemption & Spec Decode
-    panels.append(_ts_panel(pid, "Preemption & Spec Decode",
-        "Preemption(요청 중단 후 재계산) 빈도 + Speculative Decoding 효율.\n"
-        "지표: vllm:num_preemptions_total, vllm:spec_decode_efficiency\n\n"
-        "Preemption: 0 유지가 정상. 간헐적 스파이크 → KV 압박.\n"
-        "Spec Decode: 1.0에 가까울수록 효율적.\n"
-        "(Speculative Decoding 미사용 시 No data)",
+    # Preemption 발생률
+    panels.append(_ts_panel(pid, "Preemption 발생률",
+        "Preemption(요청 중단 후 재계산) 빈도.\n"
+        "지표: vllm:num_preemptions_total\n\n"
+        "· 0 유지 → 정상\n"
+        "· 간헐적 스파이크 → KV Cache 압박\n"
+        "· 지속 발생 → 메모리 부족, 서버 증설 필요",
         [
             _target(f"rate(vllm:num_preemptions_total{f}[{iv}])", "Preemption/초", "A"),
             _target(f"increase(vllm:num_preemptions_total{f}[5m])", "5분 누적", "B"),
-            _target(f"avg(vllm:spec_decode_efficiency{f})", "Spec Decode 효율", "C"),
         ],
         {"h": 8, "w": 12, "x": 12, "y": y},
         unit="none",
