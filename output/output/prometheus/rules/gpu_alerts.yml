@@ -1,0 +1,46 @@
+groups:
+- name: gpu_alerts
+  rules:
+  - alert: HighGPUUtilization
+    expr: DCGM_FI_DEV_GPU_UTIL > 95.0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: GPU {{ $labels.gpu }} on {{ $labels.Hostname }} utilization > {{ $value
+        }}%
+      description: GPU 사용률이 95.0%를 1m 이상 초과했습니다.
+  - alert: HighGPUTemperature
+    expr: DCGM_FI_DEV_GPU_TEMP > 83.0
+    for: 30s
+    labels:
+      severity: critical
+    annotations:
+      summary: GPU {{ $labels.gpu }} on {{ $labels.Hostname }} temperature {{ $value
+        }}°C
+      description: GPU 온도가 83.0°C를 초과했습니다.
+  - alert: HighVRAMUtilization
+    expr: DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) * 100
+      > 95.0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: GPU {{ $labels.gpu }} on {{ $labels.Hostname }} VRAM > {{ $value }}%
+      description: VRAM 사용률이 95.0%를 초과했습니다.
+  - alert: HighPowerUsage
+    expr: DCGM_FI_DEV_POWER_USAGE > 350.0
+    for: 1m
+    labels:
+      severity: warning
+    annotations:
+      summary: GPU {{ $labels.gpu }} on {{ $labels.Hostname }} power {{ $value }}W
+      description: GPU 전력 소비가 350.0W를 초과했습니다.
+  - alert: DCGMExporterDown
+    expr: up{job="dcgm"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: DCGM exporter down on {{ $labels.instance }}
+      description: DCGM exporter가 1분 이상 응답하지 않습니다.

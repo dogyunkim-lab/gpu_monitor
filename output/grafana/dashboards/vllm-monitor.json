@@ -1,0 +1,1414 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus"
+    }
+  ],
+  "uid": "vllm-monitor",
+  "title": "vLLM 서비스 모니터링 & 진단",
+  "tags": [
+    "vllm",
+    "llm",
+    "inference",
+    "diagnostic"
+  ],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "5s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus",
+          "value": "Prometheus"
+        }
+      },
+      {
+        "name": "model",
+        "label": "모델",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(vllm:num_requests_running, model_name)",
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "instance",
+        "label": "서버",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values(vllm:num_requests_running, instance)",
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "interval",
+        "label": "집계 간격",
+        "type": "interval",
+        "query": "1m,5m,10m,30m,1h",
+        "current": {
+          "text": "1m",
+          "value": "1m"
+        },
+        "auto": true,
+        "auto_count": 30,
+        "auto_min": "10s"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "현재 상태",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "title": "처리 중 요청",
+      "description": "현재 GPU에서 추론이 진행 중인 요청 수.\n이 값이 높으면 서버가 활발히 일하고 있는 상태.\n지표: vllm:num_requests_running",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(vllm:num_requests_running{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "대기 중 요청",
+      "description": "GPU 자원(KV Cache) 부족으로 큐에서 대기 중인 요청 수.\n0이 정상. 지속적으로 높으면 서버 증설 필요.\n지표: vllm:num_requests_waiting",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(vllm:num_requests_waiting{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "첫 토큰 응답시간 (p90)",
+      "description": "요청 후 첫 토큰까지 걸리는 시간 (사용자 체감 대기 시간).\np90 = 전체 요청의 90%가 이 시간 이내.\n지표: vllm:time_to_first_token_seconds",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "KV Cache 사용률",
+      "description": "GPU 메모리에서 KV Cache가 차지하는 비율.\n90% 이상이면 새 요청 큐에 쌓이기 시작.\n지표: vllm:gpu_cache_usage_perc",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "avg(vllm:gpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "E2E 시간 분해 (핵심 진단)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "title": "E2E 지연시간 분해 (p90)",
+      "description": "쌓인 영역(큐 + 프리필 + 디코드)과 점선의 차이를 분석.\n\n· 주황 점선(TTFT) vs 큐+프리필: 토크나이저/스케줄링 오버헤드\n· 빨간 점선(E2E) vs 쌓인 영역: phantom time (API server 병목)\n· E2E - TTFT: 첫 토큰 이후 소요 시간 (디코드+스트리밍)\n\ngap < 1초: 정상 | 10~30초: 엔진 내부 대기 | >30초: 엔진 외부 문제",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:request_queue_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "큐 대기 (p90)"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:request_prefill_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "프리필 연산 (p90)"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:request_decode_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "디코드 연산 (p90)"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "D",
+          "legendFormat": "TTFT (p90)"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "E",
+          "legendFormat": "E2E 전체 (p90)"
+        }
+      ],
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "TTFT (p90)"
+            },
+            "properties": [
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "none"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    5
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "E2E 전체 (p90)"
+            },
+            "properties": [
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "none"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    5
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "TTFT 분포 히트맵",
+      "description": "TTFT의 실제 분포를 시간축으로 표시.\n지표: vllm:time_to_first_token_seconds\n\n· 이중 분포(bimodal) → 요청 유형이 2종류 (짧은/긴 프롬프트)\n· 특정 시간대에 상위 버킷 채워짐 → 트래픽 피크 시 악화\n· 색이 진한 영역 = 대부분의 요청이 걸리는 시간대",
+      "type": "heatmap",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "options": {
+        "calculate": false,
+        "yAxis": {
+          "unit": "s"
+        },
+        "color": {
+          "scheme": "Spectral",
+          "reverse": true
+        },
+        "cellGap": 1
+      }
+    },
+    {
+      "id": 9,
+      "type": "row",
+      "title": "처리량",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "title": "요청 처리량 (req/s)",
+      "description": "초당 완료되는 요청 수.\n지표: vllm:request_success_total\n\n· 안정적 유지 → 정상 운영\n· 급격한 하락 → 서버 장애 또는 OOM 의심",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:request_success_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "완료 요청/초"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "토큰 처리량 (tokens/s)",
+      "description": "초당 처리하는 토큰 수.\n지표: vllm:prompt_tokens_total, vllm:generation_tokens_total\n\n· 입력(prefill) = 프롬프트 토큰 처리 속도\n· 생성(decode) = 새 토큰 생성 속도\n· prefill < 1000 tok/s → GPU 포화 의심",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "입력 토큰/초 (prefill)"
+        },
+        {
+          "expr": "sum(rate(vllm:generation_tokens_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval]))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "생성 토큰/초 (decode)"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "추론 시간 vs E2E (병목 분리)",
+      "description": "vLLM 엔진 내부 추론 시간과 E2E 전체 시간 비교.\n두 선의 차이 = API server 오버헤드.\n(토크나이저, ZMQ IPC, detokenizer, 스트리밍)\n\n· 차이 작음 → vLLM 내부 문제\n· 차이 크면 → API server CPU 병목 의심",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:request_inference_time_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "추론 시간 (p90)"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "E2E 전체 (p90)"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "요청 특성 분석",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "collapsed": false
+    },
+    {
+      "id": 14,
+      "title": "프롬프트 토큰 수 분포",
+      "description": "요청당 프롬프트(입력) 토큰 수의 분포.\n지표: vllm:request_prompt_tokens\n\n· p50 vs p99 격차 10배 이상 → 롱테일 존재\n· p99 > 50k → 롱테일이 TTFT 악화의 주범\n· p99 < 10k → 롱테일 아님, 다른 원인",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5,  sum(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[5m])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "중앙값 (p50)"
+        },
+        {
+          "expr": "histogram_quantile(0.9,  sum(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[5m])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "p90"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", instance=~\"$instance\"}[5m])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "이터레이션당 처리 토큰 수",
+      "description": "스케줄러 1회 실행(iteration)에서 처리하는 토큰 수.\n지표: vllm:iteration_tokens_total\n\nChunked prefill의 청크 크기를 간접 반영.\n· p90 ~ 2048 → 기본 청크 크기 사용 중\n· 너무 작으면 스케줄링 오버헤드 누적",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5,  sum(rate(vllm:iteration_tokens_total_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "중앙값 (p50)"
+        },
+        {
+          "expr": "histogram_quantile(0.9,  sum(rate(vllm:iteration_tokens_total_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "p90"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(vllm:iteration_tokens_total_bucket{model_name=~\"$model\", instance=~\"$instance\"}[$interval])) by (le))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "p99"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "동시성 & KV Cache",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "collapsed": false
+    },
+    {
+      "id": 17,
+      "title": "동시 요청 수 (실행/대기/스왑)",
+      "description": "실행 중, 대기 중, 스왑된 요청 수의 시계열.\n지표: vllm:num_requests_running/waiting/swapped\n\n· waiting 쌓이면 → KV Cache 부족\n· swapped != 0 → CPU 스왑 발생 (preemption 동반 가능)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(vllm:num_requests_running{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "실행 중"
+        },
+        {
+          "expr": "sum(vllm:num_requests_waiting{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "대기 중"
+        },
+        {
+          "expr": "sum(vllm:num_requests_swapped{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "스왑됨"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "pointSize": 5,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "KV Cache 사용률 추이",
+      "description": "GPU 및 CPU KV Cache 점유율 변화.\n지표: vllm:gpu_cache_usage_perc, vllm:cpu_cache_usage_perc\n\n· GPU > 90% 지속 + waiting 쌓임 → 메모리 병목\n  → FP8 전환 또는 max_model_len 축소 고려\n· waiting 0 + KV < 70% → 리소스 여유",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "avg by (model_name, instance) (vllm:gpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "GPU {{model_name}} ({{instance}})"
+        },
+        {
+          "expr": "avg by (model_name, instance) (vllm:cpu_cache_usage_perc{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "CPU {{model_name}} ({{instance}})"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.7
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "KV Cache 블록 현황",
+      "description": "KV Cache 블록의 할당/여유 상태.\n지표: vllm:num_gpu_blocks_free/used, vllm:num_cpu_blocks_free/used\n\nGPU 블록이 소진되면 새 요청을 처리할 수 없음.\nCPU 블록은 스왑 대상.\n(vLLM 버전에 따라 미지원 시 No data)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum(vllm:num_gpu_blocks_used{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "GPU 사용 블록"
+        },
+        {
+          "expr": "sum(vllm:num_gpu_blocks_free{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "GPU 여유 블록"
+        },
+        {
+          "expr": "sum(vllm:num_cpu_blocks_used{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "CPU 사용 블록"
+        },
+        {
+          "expr": "sum(vllm:num_cpu_blocks_free{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "D",
+          "legendFormat": "CPU 여유 블록"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 51
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Preemption & Spec Decode",
+      "description": "Preemption(요청 중단 후 재계산) 빈도 + Speculative Decoding 효율.\n지표: vllm:num_preemptions_total, vllm:spec_decode_efficiency\n\nPreemption: 0 유지가 정상. 간헐적 스파이크 → KV 압박.\nSpec Decode: 1.0에 가까울수록 효율적.\n(Speculative Decoding 미사용 시 No data)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "rate(vllm:num_preemptions_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "Preemption/초"
+        },
+        {
+          "expr": "increase(vllm:num_preemptions_total{model_name=~\"$model\", instance=~\"$instance\"}[5m])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "5분 누적"
+        },
+        {
+          "expr": "avg(vllm:spec_decode_efficiency{model_name=~\"$model\", instance=~\"$instance\"})",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "C",
+          "legendFormat": "Spec Decode 효율"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 51
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "row",
+      "title": "CPU & 프로세스 모니터링",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 59
+      },
+      "collapsed": false
+    },
+    {
+      "id": 22,
+      "title": "VM CPU 사용률 (%)",
+      "description": "각 VM의 전체 CPU 사용률 (node_exporter).\nvLLM v1은 API server + Engine Core + GPU Worker가\n별도 프로세스로 동작하여 CPU를 경쟁.\n\n· 80%+ 지속 → CPU 경합으로 API server 지연 발생\n· E2E gap이 큰 시점과 CPU 피크 겹치면 CPU 병목 확정\n\nNo data 시: node_exporter 설치 확인 (포트 9100)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "100 - (avg by (vm) (rate(node_cpu_seconds_total{job=\"node\", mode=\"idle\", vm=~\"$instance\"}[1m])) * 100)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "{{vm}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 60
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Load Average (1분) vs CPU 코어",
+      "description": "1분 평균 부하와 CPU 코어 수 비교 (node_exporter).\nLoad > 코어 수 → 프로세스가 CPU를 기다리는 상태.\n\nvLLM TP=2 기준 최소 4 코어 필요:\n  1 API server + 1 Engine Core + 2 GPU Worker\n코어 부족 시 Engine Core(busy loop)가 CPU를 독점\n→ API server starve → 토크나이저/스트리밍 지연",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "node_load1{job=\"node\", vm=~\"$instance\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "{{vm}} Load 1분"
+        },
+        {
+          "expr": "count by (vm) (count by (vm, cpu) (node_cpu_seconds_total{job=\"node\", mode=\"idle\", vm=~\"$instance\"}))",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "B",
+          "legendFormat": "{{vm}} CPU 코어"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 60
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "vLLM 프로세스 CPU 사용률",
+      "description": "vLLM API server 프로세스의 CPU 사용 시간 변화율.\n지표: process_cpu_seconds_total\n\n· 값 1.0 = CPU 1코어를 100% 점유\n· E2E gap이 큰 시점에 높으면\n  API server가 토크나이즈/스트리밍에 CPU를 다 쓰는 것\n· --api-server-count 늘리면 분산 가능",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{model_name=~\"$model\", instance=~\"$instance\"}[$interval])",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A",
+          "legendFormat": "{{instance}} vLLM CPU"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 60
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 4
+}
