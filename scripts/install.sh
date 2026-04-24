@@ -57,6 +57,9 @@ if [ -d "${OUTPUT_DIR}/prometheus" ]; then
     sudo mkdir -p "${PROMETHEUS_CONF_DIR}/rules"
     sudo cp "${OUTPUT_DIR}/prometheus/rules/gpu_alerts.yml" "${PROMETHEUS_CONF_DIR}/rules/gpu_alerts.yml"
 
+    # 권한 설정
+    sudo chown -R prometheus:prometheus "${PROMETHEUS_CONF_DIR}/"
+
     if systemctl is-active --quiet prometheus; then
         echo "  Prometheus 재시작"
         sudo systemctl reload prometheus || sudo systemctl restart prometheus
@@ -79,6 +82,10 @@ if [ -d "${OUTPUT_DIR}/grafana" ]; then
     # 모든 대시보드 JSON 복사 (gpu-cluster.json + vllm-monitor.json)
     sudo cp "${OUTPUT_DIR}"/grafana/dashboards/*.json \
         "${GRAFANA_CONF_DIR}/dashboards/"
+
+    # 권한 설정
+    sudo chown -R grafana:grafana "${GRAFANA_CONF_DIR}/provisioning/"
+    sudo chown -R grafana:grafana "${GRAFANA_CONF_DIR}/dashboards/"
 
     if systemctl is-active --quiet grafana-server; then
         echo "  Grafana 재시작"
