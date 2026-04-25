@@ -205,6 +205,30 @@ def _build_panels() -> list:  # noqa: C901
     iv = _IV
 
     # ================================================================
+    # Section 0: GPU 사용률
+    # ================================================================
+    panels.append(_row(pid, "GPU 사용률", y)); pid += 1; y += 1
+
+    panels.append(_ts_panel(pid, "GPU Utilization (%)",
+        "DCGM exporter에서 수집한 GPU 코어 사용률.\n"
+        "지표: DCGM_FI_DEV_GPU_UTIL\n\n"
+        "· 요청 처리 중 → 사용률 상승\n"
+        "· idle → 0% 근처\n"
+        "· 지속 100% → GPU 포화, 응답 지연 발생",
+        [
+            _target('DCGM_FI_DEV_GPU_UTIL{vm=~"$instance"}',
+                    "{{vm}} GPU{{gpu}}", "A"),
+        ],
+        {"h": 8, "w": 24, "x": 0, "y": y},
+        unit="percent", ymin=0, ymax=100,
+        thresholds=[
+            {"color": "green", "value": None},
+            {"color": "orange", "value": 70},
+            {"color": "red", "value": 90},
+        ],
+    )); pid += 1; y += 8
+
+    # ================================================================
     # Section 1: 현재 상태
     # ================================================================
     panels.append(_row(pid, "현재 상태", y)); pid += 1; y += 1
@@ -252,8 +276,8 @@ def _build_panels() -> list:  # noqa: C901
     panels.append(_gauge_panel(pid, "KV Cache 사용률",
         "GPU 메모리에서 KV Cache가 차지하는 비율.\n"
         "90% 이상이면 새 요청 큐에 쌓이기 시작.\n"
-        "지표: vllm:kv_cache_usage_perc",
-        f"avg(vllm:kv_cache_usage_perc{f})",
+        "지표: vllm:gpu_cache_usage_perc / vllm:kv_cache_usage_perc",
+        f"avg(vllm:gpu_cache_usage_perc{f}) or avg(vllm:kv_cache_usage_perc{f})",
         {"h": 4, "w": 6, "x": 18, "y": y},
         thresholds=[
             {"color": "green", "value": None},
@@ -485,15 +509,21 @@ def _build_panels() -> list:  # noqa: C901
     )); pid += 1
 
     # KV Cache 사용률 추이
-    panels.append(_ts_panel(pid, "KV Cache 사용률 추이",
-        "KV Cache 점유율 변화.\n"
-        "지표: vllm:kv_cache_usage_perc\n\n"
-        "· 90% 이상 지속 + waiting 쌓임 → 메모리 병목\n"
+    panels.append(_ts_panel(pid, "KV Cache 사용률 추이 (GPU / CPU)",
+        "GPU 및 CPU KV Cache 점유율 변화.\n"
+        "지표: vllm:gpu_cache_usage_perc, vllm:cpu_cache_usage_perc,\n"
+        "  vllm:kv_cache_usage_perc\n\n"
+        "· GPU 90% 이상 지속 + waiting 쌓임 → 메모리 병목\n"
         "  → FP8 전환 또는 max_model_len 축소 고려\n"
+        "· CPU Cache > 0 → CPU swap 사용 중 (성능 저하)\n"
         "· waiting 0 + KV < 70% → 리소스 여유",
         [
+            _target(f"avg by (model_name, instance) (vllm:gpu_cache_usage_perc{f})",
+                    "GPU Cache {{model_name}} ({{instance}})", "A"),
+            _target(f"avg by (model_name, instance) (vllm:cpu_cache_usage_perc{f})",
+                    "CPU Cache {{model_name}} ({{instance}})", "B"),
             _target(f"avg by (model_name, instance) (vllm:kv_cache_usage_perc{f})",
-                    "{{model_name}} ({{instance}})", "A"),
+                    "KV Cache {{model_name}} ({{instance}})", "C"),
         ],
         {"h": 8, "w": 12, "x": 12, "y": y},
         unit="percentunit", ymin=0, ymax=1,
