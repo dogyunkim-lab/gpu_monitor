@@ -85,7 +85,8 @@ def _stat_panel(
 def _gauge_panel(
     id_: int, title: str, desc: str,
     expr: str, gridPos: dict,
-    unit: str = "percentunit", thresholds: list | None = None,
+    unit: str = "percent", thresholds: list | None = None,
+    ymin: float = 0, ymax: float = 100,
 ) -> dict:
     steps = thresholds or [{"color": "green", "value": None}]
     return {
@@ -94,7 +95,7 @@ def _gauge_panel(
         "targets": [_target(expr)],
         "gridPos": gridPos,
         "fieldConfig": {"defaults": {
-            "unit": unit, "min": 0, "max": 1,
+            "unit": unit, "min": ymin, "max": ymax,
             "thresholds": {"mode": "absolute", "steps": steps},
         }},
     }
@@ -180,6 +181,20 @@ def _build_dashboard() -> dict:
                 "current": {"text": "All", "value": "$__all"},
             },
             {
+                "name": "hostname", "label": "GPU 서버",
+                "type": "query", "datasource": _ds(),
+                "query": "label_values(DCGM_FI_DEV_GPU_UTIL, Hostname)",
+                "includeAll": True, "multi": True,
+                "current": {"text": "All", "value": "$__all"},
+            },
+            {
+                "name": "gpu", "label": "GPU",
+                "type": "query", "datasource": _ds(),
+                "query": 'label_values(DCGM_FI_DEV_GPU_UTIL{Hostname=~"$hostname"}, gpu)',
+                "includeAll": True, "multi": True,
+                "current": {"text": "All", "value": "$__all"},
+            },
+            {
                 "name": "interval", "label": "집계 간격",
                 "type": "interval",
                 "query": "1m,5m,10m,30m,1h",
@@ -216,8 +231,8 @@ def _build_panels() -> list:  # noqa: C901
         "· idle → 0% 근처\n"
         "· 지속 100% → GPU 포화, 응답 지연 발생",
         [
-            _target('DCGM_FI_DEV_GPU_UTIL{vm=~"$instance"}',
-                    "{{vm}} GPU{{gpu}}", "A"),
+            _target('DCGM_FI_DEV_GPU_UTIL{Hostname=~"$hostname", gpu=~"$gpu"}',
+                    "{{Hostname}} GPU{{gpu}}", "A"),
         ],
         {"h": 8, "w": 24, "x": 0, "y": y},
         unit="percent", ymin=0, ymax=100,
@@ -277,12 +292,12 @@ def _build_panels() -> list:  # noqa: C901
         "GPU 메모리에서 KV Cache가 차지하는 비율.\n"
         "90% 이상이면 새 요청 큐에 쌓이기 시작.\n"
         "지표: vllm:gpu_cache_usage_perc / vllm:kv_cache_usage_perc",
-        f"avg(vllm:gpu_cache_usage_perc{f}) or avg(vllm:kv_cache_usage_perc{f})",
+        f"(avg(vllm:gpu_cache_usage_perc{f}) or avg(vllm:kv_cache_usage_perc{f})) * 100",
         {"h": 4, "w": 6, "x": 18, "y": y},
         thresholds=[
             {"color": "green", "value": None},
-            {"color": "orange", "value": 0.7},
-            {"color": "red", "value": 0.9},
+            {"color": "orange", "value": 70},
+            {"color": "red", "value": 90},
         ],
     )); pid += 1; y += 4
 
@@ -518,19 +533,19 @@ def _build_panels() -> list:  # noqa: C901
         "· CPU Cache > 0 → CPU swap 사용 중 (성능 저하)\n"
         "· waiting 0 + KV < 70% → 리소스 여유",
         [
-            _target(f"avg by (model_name, instance) (vllm:gpu_cache_usage_perc{f})",
+            _target(f"avg by (model_name, instance) (vllm:gpu_cache_usage_perc{f}) * 100",
                     "GPU Cache {{model_name}} ({{instance}})", "A"),
-            _target(f"avg by (model_name, instance) (vllm:cpu_cache_usage_perc{f})",
+            _target(f"avg by (model_name, instance) (vllm:cpu_cache_usage_perc{f}) * 100",
                     "CPU Cache {{model_name}} ({{instance}})", "B"),
-            _target(f"avg by (model_name, instance) (vllm:kv_cache_usage_perc{f})",
+            _target(f"avg by (model_name, instance) (vllm:kv_cache_usage_perc{f}) * 100",
                     "KV Cache {{model_name}} ({{instance}})", "C"),
         ],
         {"h": 8, "w": 12, "x": 12, "y": y},
-        unit="percentunit", ymin=0, ymax=1,
+        unit="percent", ymin=0, ymax=100,
         thresholds=[
             {"color": "green", "value": None},
-            {"color": "orange", "value": 0.7},
-            {"color": "red", "value": 0.9},
+            {"color": "orange", "value": 70},
+            {"color": "red", "value": 90},
         ],
     )); pid += 1; y += 8
 
