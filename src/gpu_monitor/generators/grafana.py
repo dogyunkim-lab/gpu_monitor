@@ -166,7 +166,7 @@ def _panel(id_: int, title: str, type_: str, targets: list, gridPos: dict, **ext
 
 
 def _target(expr: str, legend: str = "") -> dict:
-    t = {"expr": expr, "datasource": _ds(), "refId": "A"}
+    t = {"expr": expr, "datasource": _ds(), "refId": "A", "interval": "1s"}
     if legend:
         t["legendFormat"] = legend
     return t

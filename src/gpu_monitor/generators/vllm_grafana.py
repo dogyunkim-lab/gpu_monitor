@@ -47,7 +47,7 @@ def _ds() -> dict:
 
 
 def _target(expr: str, legend: str = "", ref: str = "A", fmt: str = "") -> dict:
-    t: dict = {"expr": expr, "datasource": _ds(), "refId": ref}
+    t: dict = {"expr": expr, "datasource": _ds(), "refId": ref, "interval": "1s"}
     if legend:
         t["legendFormat"] = legend
     if fmt:

@@ -28,8 +28,8 @@ alerts:
 
 prometheus:
   output_dir: "/opt/prometheus/prometheus-2.55.0.linux-amd64"
-  scrape_interval: "5s"
-  evaluation_interval: "15s"
+  scrape_interval: "1s"
+  evaluation_interval: "1s"
   job_name: "dcgm"
   metrics_path: "/metrics"
 
@@ -44,7 +44,7 @@ grafana:
 node_exporter:
   enabled: true
   port: 9100                    # node_exporter 기본 포트
-  scrape_interval: "5s"
+  scrape_interval: "1s"
 
 # vLLM 서버 모니터링
 vllm:
